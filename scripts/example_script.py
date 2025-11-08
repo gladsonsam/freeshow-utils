@@ -4,7 +4,7 @@
 Example Python script for FreeShow Formatter
 
 This script reads text from stdin, processes it, and outputs the result to stdout.
-Groups language sections by their language tag.
+Groups language sections by their language tag within each verse.
 
 The Rust backend sets PYTHONIOENCODING=utf-8 environment variable
 before starting Python, which ensures UTF-8 encoding for stdin/stdout/stderr.
@@ -16,15 +16,16 @@ import re
 
 def process_text(text):
     """
-    Process the input text by grouping language sections.
-    Groups all lines with the same language tag together.
+    Process the input text by grouping language sections within each verse.
+    Groups all lines with the same language tag together within each verse block.
     """
     lines = text.split('\n')
     output_lines = []
     
-    # Dictionary to store lines by language tag
-    language_groups = {}
-    current_header = None
+    # Store verses and their language groups
+    verses = []
+    current_verse = None
+    current_verse_language_groups = {}
     current_section = None
     section_lines = []
     
@@ -38,18 +39,25 @@ def process_text(text):
         if header_match and not re.match(r'^#\d+:', header_match.group(1)):
             # Save previous section if exists
             if current_section and section_lines:
-                if current_section not in language_groups:
-                    language_groups[current_section] = []
+                if current_section not in current_verse_language_groups:
+                    current_verse_language_groups[current_section] = []
                 # Remove trailing empty lines from section
                 while section_lines and not section_lines[-1].strip():
                     section_lines.pop()
                 if section_lines:  # Only add if there are actual content lines
-                    language_groups[current_section].extend(section_lines)
+                    current_verse_language_groups[current_section].extend(section_lines)
                 section_lines = []
             
-            # Start new section
-            current_header = stripped_line
-            output_lines.append(current_header)
+            # Save previous verse if exists
+            if current_verse is not None:
+                verses.append({
+                    'header': current_verse,
+                    'language_groups': current_verse_language_groups.copy()
+                })
+            
+            # Start new verse
+            current_verse = stripped_line
+            current_verse_language_groups = {}
             current_section = None
             i += 1
             continue
@@ -59,13 +67,13 @@ def process_text(text):
         if lang_match:
             # Save previous section if exists
             if current_section and section_lines:
-                if current_section not in language_groups:
-                    language_groups[current_section] = []
+                if current_section not in current_verse_language_groups:
+                    current_verse_language_groups[current_section] = []
                 # Remove trailing empty lines from section
                 while section_lines and not section_lines[-1].strip():
                     section_lines.pop()
                 if section_lines:  # Only add if there are actual content lines
-                    language_groups[current_section].extend(section_lines)
+                    current_verse_language_groups[current_section].extend(section_lines)
                 section_lines = []
             
             # Start new language section
@@ -75,51 +83,66 @@ def process_text(text):
             i += 1
             continue
         
-        # If we have a current section, add the line to it (but skip empty lines that are separators)
+        # If we have a current section, add the line to it
         if current_section:
-            # Skip empty lines that appear right after a language tag or right before the next tag
-            # We'll handle empty lines within content differently
             section_lines.append(line)
         else:
-            # Lines before any section
+            # Lines before any section (shouldn't happen normally, but handle it)
             if stripped_line:
-                output_lines.append(line)
+                # If we have a current verse, we might need to handle orphaned lines
+                pass
         
         i += 1
     
     # Save the last section
     if current_section and section_lines:
-        if current_section not in language_groups:
-            language_groups[current_section] = []
+        if current_section not in current_verse_language_groups:
+            current_verse_language_groups[current_section] = []
         # Remove trailing empty lines from section
         while section_lines and not section_lines[-1].strip():
             section_lines.pop()
         if section_lines:  # Only add if there are actual content lines
-            language_groups[current_section].extend(section_lines)
+            current_verse_language_groups[current_section].extend(section_lines)
     
-    # Output language groups in order: [#1:en], [#2:en], [#3:ml], etc.
-    # Sort by the number in the tag
-    sorted_sections = sorted(language_groups.items(), 
-                            key=lambda x: int(re.search(r'#(\d+):', x[0]).group(1)))
+    # Save the last verse
+    if current_verse is not None:
+        verses.append({
+            'header': current_verse,
+            'language_groups': current_verse_language_groups.copy()
+        })
     
-    for section_tag, section_lines_list in sorted_sections:
-        if not section_lines_list:
-            continue
-            
-        # Remove leading empty lines from section
-        cleaned_lines = section_lines_list[:]
-        while cleaned_lines and not cleaned_lines[0].strip():
-            cleaned_lines = cleaned_lines[1:]
-        # Remove trailing empty lines from section
-        while cleaned_lines and not cleaned_lines[-1].strip():
-            cleaned_lines = cleaned_lines[:-1]
+    # Output verses
+    for verse_idx, verse in enumerate(verses):
+        if verse_idx > 0:
+            # Add blank line between verses
+            output_lines.append('')
         
-        # Only output if there are actual content lines
-        if cleaned_lines:
-            output_lines.append(section_tag)
-            # Add the lines from this section
-            for section_line in cleaned_lines:
-                output_lines.append(section_line)
+        # Output verse header
+        output_lines.append(verse['header'])
+        
+        # Output language groups in order: [#1:en], [#2:en], [#3:ml], etc.
+        # Sort by the number in the tag
+        sorted_sections = sorted(verse['language_groups'].items(), 
+                                key=lambda x: int(re.search(r'#(\d+):', x[0]).group(1)))
+        
+        for section_tag, section_lines_list in sorted_sections:
+            if not section_lines_list:
+                continue
+                
+            # Remove leading empty lines from section
+            cleaned_lines = section_lines_list[:]
+            while cleaned_lines and not cleaned_lines[0].strip():
+                cleaned_lines = cleaned_lines[1:]
+            # Remove trailing empty lines from section
+            while cleaned_lines and not cleaned_lines[-1].strip():
+                cleaned_lines = cleaned_lines[:-1]
+            
+            # Only output if there are actual content lines
+            if cleaned_lines:
+                output_lines.append(section_tag)
+                # Add the lines from this section
+                for section_line in cleaned_lines:
+                    output_lines.append(section_line)
     
     # Join lines and clean up
     # Remove any trailing blank lines from the output
