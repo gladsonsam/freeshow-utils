@@ -26,3 +26,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 
+# Wayland won't let a client position its own windows, so the output display is
+# chosen through GTK instead - see src/output_window.rs. Version must track the
+# gtk Tauri itself links against.
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+

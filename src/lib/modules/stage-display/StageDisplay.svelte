@@ -34,6 +34,8 @@
   let loading = $state(true);
   let displays = $state<Display[]>([]);
   let confirmRestore = $state(false);
+  // set when the window system refused to put the output on the chosen display
+  let placementWarning = $state("");
 
   // previews show real output when FreeShow is up, sample data otherwise
   let previewData = $derived(
@@ -167,12 +169,13 @@
     });
 
   const activate = (meta: TemplateMeta) =>
-    guard(() =>
-      openOutputWindow(meta, {
-        display: selectedDisplay,
-        fullscreen: $outputSettings.fullscreen,
-      }),
-    );
+    guard(async () => {
+      placementWarning =
+        (await openOutputWindow(meta, {
+          display: selectedDisplay,
+          fullscreen: $outputSettings.fullscreen,
+        })) ?? "";
+    });
 
   const saveEdits = (template: Template) =>
     guard(async () => {
@@ -230,8 +233,15 @@
         <span>Fullscreen</span>
       </label>
 
-      <span class="output-hint">Activate opens the template on this display.</span>
+      <span class="output-hint">
+        Activate opens the template on this display. On Linux/Wayland the display
+        choice only applies to fullscreen output.
+      </span>
     </div>
+
+    {#if placementWarning}
+      <div class="warn-box">{placementWarning}</div>
+    {/if}
 
     {#if errorMessage}
       <div class="error-box">{errorMessage}</div>
@@ -410,6 +420,14 @@
     background: var(--danger-soft);
     border: 1px solid var(--danger);
     color: var(--danger);
+    font-size: 0.85rem;
+  }
+
+  .warn-box {
+    padding: var(--space-3) var(--space-4);
+    background: rgb(245 180 0 / 0.14);
+    border: 1px solid var(--warning);
+    color: var(--warning);
     font-size: 0.85rem;
   }
 </style>

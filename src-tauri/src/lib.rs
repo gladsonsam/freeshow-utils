@@ -1,3 +1,4 @@
+mod output_window;
 mod python;
 mod templates;
 
@@ -17,6 +18,7 @@ pub fn run() {
             templates::export_template_file,
             templates::write_templates_readme,
             templates::templates_folder,
+            output_window::place_output_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
