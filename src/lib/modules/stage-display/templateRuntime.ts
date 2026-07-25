@@ -38,7 +38,8 @@ parent.postMessage({ type: "${READY_MESSAGE}" }, "*");
 const BASE_STYLE = `
 html, body { margin: 0; padding: 0; height: 100%; }
 body { background: #000; color: #fff; overflow: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-user-select: none; user-select: none; }
 `;
 
 /**
