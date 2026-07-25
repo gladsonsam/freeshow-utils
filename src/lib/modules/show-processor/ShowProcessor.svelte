@@ -2,6 +2,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { open } from "@tauri-apps/plugin-dialog";
   import Button from "$lib/ui/Button.svelte";
+  import Icon from "$lib/ui/Icon.svelte";
   import IconButton from "$lib/ui/IconButton.svelte";
   import Panel from "$lib/ui/Panel.svelte";
 
@@ -13,7 +14,6 @@
   let errorMessage = $state("");
   let isLoading = $state(false);
   let copySuccess = $state(false);
-  let showOutput = $state(false);
   let isReloading = $state(false);
 
   async function selectScriptsFolder() {
@@ -76,7 +76,6 @@
         scriptPath: selectedScript,
         inputText,
       });
-      showOutput = true;
     } catch (error) {
       errorMessage = `Execution error: ${error}`;
       outputText = "";
@@ -89,7 +88,6 @@
     outputText = "";
     errorMessage = "";
     copySuccess = false;
-    showOutput = false;
   }
 
   async function copyToClipboard() {
@@ -106,6 +104,16 @@
   function scriptName(scriptPath: string): string {
     const parts = scriptPath.split(/[/\\]/);
     return parts[parts.length - 1] || scriptPath;
+  }
+
+  /**
+   * The tail of the folder path - enough to recognise which folder it is
+   * without the column having to be wide enough for a home directory. The
+   * whole path is still on the element's tooltip.
+   */
+  function folderLabel(folderPath: string): string {
+    const parts = folderPath.split(/[/\\]/).filter(Boolean);
+    return parts.slice(-2).join("/") || folderPath;
   }
 
   function handleKeyDown(event: KeyboardEvent) {
@@ -128,17 +136,24 @@
             disabled={isReloading}
             onclick={loadScripts}
           >
-            {isReloading ? "⏳" : "⟳"}
+            <Icon name="refresh" />
           </IconButton>
         {/if}
       {/snippet}
 
       <div class="folder-row">
-        <Button variant="primary" size="sm" full onclick={selectScriptsFolder}>
+        <!-- loud only while it is the one thing left to do; once a folder is
+             picked it is a rarely-used setting and shouldn't shout -->
+        <Button
+          variant={scriptsFolder ? "secondary" : "primary"}
+          size="sm"
+          full
+          onclick={selectScriptsFolder}
+        >
           {scriptsFolder ? "Change folder" : "Select scripts folder"}
         </Button>
         {#if scriptsFolder}
-          <div class="folder-path" title={scriptsFolder}>{scriptsFolder}</div>
+          <div class="folder-path" title={scriptsFolder}>{folderLabel(scriptsFolder)}</div>
         {/if}
       </div>
 
@@ -150,6 +165,7 @@
                 type="button"
                 class="script-item"
                 class:active={selectedScript === script}
+                title={script}
                 onclick={() => {
                   selectedScript = script;
                   errorMessage = "";
@@ -170,41 +186,48 @@
 
   <div class="work-column">
     <Panel title="Input text">
+      {#snippet actions()}
+        {#if selectedScript}
+          <span class="active-script">{scriptName(selectedScript)}</span>
+        {/if}
+        <Button
+          variant="primary"
+          size="sm"
+          onclick={executeScript}
+          disabled={isLoading || !selectedScript || !inputText.trim()}
+        >
+          {isLoading ? "Running…" : "▶ Run script"}
+        </Button>
+      {/snippet}
+
       <textarea class="editor" bind:value={inputText} placeholder="Enter or paste your text here…"
       ></textarea>
     </Panel>
-
-    <div class="actions">
-      <Button
-        variant="primary"
-        onclick={executeScript}
-        disabled={isLoading || !selectedScript || !inputText.trim()}
-      >
-        {isLoading ? "Running…" : "▶ Run script"}
-      </Button>
-      {#if selectedScript}
-        <span class="active-script">{scriptName(selectedScript)}</span>
-      {/if}
-      {#if outputText || errorMessage}
-        <Button variant="ghost" onclick={clearOutput}>Clear</Button>
-      {/if}
-    </div>
 
     {#if errorMessage}
       <div class="error-box">{errorMessage}</div>
     {/if}
 
-    {#if showOutput || outputText}
-      <Panel title="Output">
-        {#snippet actions()}
-          <Button size="sm" onclick={copyToClipboard} disabled={!outputText}>
-            {copySuccess ? "Copied" : "Copy"}
-          </Button>
-        {/snippet}
-        <textarea class="editor" bind:value={outputText} placeholder="Output appears here…"
-        ></textarea>
-      </Panel>
-    {/if}
+    <!-- always here, empty or not: a panel that appears on the first run would
+         resize the input box out from under whoever is typing in it -->
+    <Panel title="Output">
+      {#snippet actions()}
+        <Button
+          size="sm"
+          variant="ghost"
+          onclick={clearOutput}
+          disabled={!outputText && !errorMessage}
+        >
+          Clear
+        </Button>
+        <Button size="sm" onclick={copyToClipboard} disabled={!outputText}>
+          {copySuccess ? "Copied" : "Copy"}
+        </Button>
+      {/snippet}
+
+      <textarea class="editor" bind:value={outputText} placeholder="Output appears here…"
+      ></textarea>
+    </Panel>
   </div>
 </div>
 
@@ -234,8 +257,17 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
+    min-width: 0;
     min-height: 0;
     overflow-y: auto;
+  }
+
+  /* input and output split the column evenly and fill it, so the window height
+     the operator gave us is the height of the boxes they type into. They stop
+     shrinking at 160px and the column scrolls instead */
+  .work-column :global(.panel) {
+    flex: 1 1 0;
+    min-height: 160px;
   }
 
   .folder-row {
@@ -249,8 +281,6 @@
   .folder-path {
     font-size: 0.75rem;
     color: var(--text-faint);
-    direction: rtl;
-    text-align: left;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -275,7 +305,11 @@
     font-size: 0.85rem;
     font-family: var(--font-mono);
     cursor: pointer;
-    word-break: break-all;
+    /* one row per script - a long filename broken across two lines makes the
+       list look like it holds twice as many things as it does */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .script-item:hover:not(.active) {
@@ -296,25 +330,26 @@
     color: var(--text-faint);
   }
 
+  /* fills its panel rather than carrying a size of its own - the panel is what
+     knows how much room there is */
   .editor {
+    flex: 1;
     width: 100%;
-    min-height: 200px;
-    resize: vertical;
+    min-height: 0;
+    resize: none;
     font-family: var(--font-mono);
     font-size: 0.9rem;
     line-height: 1.6;
-  }
-
-  .actions {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
   }
 
   .active-script {
     font-size: 0.8rem;
     font-family: var(--font-mono);
     color: var(--text-faint);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 40ch;
   }
 
   .error-box {
