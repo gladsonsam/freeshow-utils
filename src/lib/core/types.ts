@@ -8,7 +8,13 @@ export type ChordRef = { pos: number; key: string };
 export type TextSpan = { value?: string; style?: string };
 export type ShowLine = { text?: TextSpan[]; chords?: ChordRef[] };
 export type ShowItem = { type?: string; lines?: ShowLine[] };
-export type ShowSlide = { group?: string; color?: string; items?: ShowItem[] };
+export type ShowSlide = {
+  group?: string;
+  color?: string;
+  items?: ShowItem[];
+  /** ids of slides that belong to this one's group and follow it in order */
+  children?: string[];
+};
 
 export type Show = {
   name?: string;

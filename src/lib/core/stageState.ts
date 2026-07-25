@@ -17,26 +17,55 @@ import type {
 // Everything here is a plain function of raw FreeShow data, so it can be reasoned
 // about (and tested) without a live connection.
 
+/** a slide in playback order, plus the group parent it hangs off (if any) */
+export type SlideRef = { id: string; parentId: string | null };
+
+/**
+ * Flatten a layout into the order slides actually play in.
+ *
+ * A layout only stores the *parent* of each group. A group holding several
+ * slides keeps the rest in the parent's `children`, and they play immediately
+ * after it. FreeShow's `out.slide.index` counts positions in this expanded list,
+ * not in the stored layout - so indexing the raw layout array silently reads the
+ * wrong slide as soon as any group has more than one.
+ */
+export function layoutRefs(show: Show, layoutId?: string): SlideRef[] {
+  const entries = layoutId ? show.layouts?.[layoutId]?.slides : undefined;
+  if (!entries) return [];
+
+  const refs: SlideRef[] = [];
+  for (const entry of entries) {
+    refs.push({ id: entry.id, parentId: null });
+    for (const childId of show.slides?.[entry.id]?.children || []) {
+      refs.push({ id: childId, parentId: entry.id });
+    }
+  }
+  return refs;
+}
+
+/** a resolved slide together with its group parent, so children can inherit */
+export type ResolvedSlide = { slide: ShowSlide; parent: ShowSlide | null };
+
 /** resolve out.slide (showId + layoutId + index) -> the real slide content */
 export function resolveSlide(
   out: Out | null,
   shows: Record<string, Show>,
   offset = 0,
-): ShowSlide | null {
+): ResolvedSlide | null {
   const slideRef = out?.out?.slide;
   if (!slideRef?.id) return null;
 
   const show = shows[slideRef.id];
   if (!show) return null;
 
-  const layoutId = slideRef.layout || show.settings?.activeLayout;
-  const layoutSlides = layoutId ? show.layouts?.[layoutId]?.slides : undefined;
-  if (!layoutSlides) return null;
-
-  const ref = layoutSlides[(slideRef.index ?? 0) + offset];
+  const refs = layoutRefs(show, slideRef.layout || show.settings?.activeLayout);
+  const ref = refs[(slideRef.index ?? 0) + offset];
   if (!ref) return null;
 
-  return show.slides?.[ref.id] ?? null;
+  const slide = show.slides?.[ref.id];
+  if (!slide) return null;
+
+  return { slide, parent: ref.parentId ? (show.slides?.[ref.parentId] ?? null) : null };
 }
 
 export function slideTextLines(slide: ShowSlide | null): ShowLine[] {
@@ -76,11 +105,17 @@ export function toStageLine(line: ShowLine): StageLine {
   return { text, color: spans[0]?.color || "#ffffff", chords, spans };
 }
 
-export function toSlideView(slide: ShowSlide | null): SlideView | null {
-  if (!slide) return null;
+/**
+ * Slides after the first in a group carry no group name or colour of their own,
+ * so they inherit the parent's - otherwise a continuation slide shows a blank
+ * group tab instead of "Chorus".
+ */
+export function toSlideView(resolved: ResolvedSlide | null): SlideView | null {
+  if (!resolved) return null;
+  const { slide, parent } = resolved;
   return {
-    group: slide.group || "",
-    color: slide.color || "",
+    group: slide.group || parent?.group || "",
+    color: slide.color || parent?.color || "",
     lines: slideTextLines(slide).map(toStageLine),
   };
 }
