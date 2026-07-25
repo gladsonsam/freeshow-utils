@@ -35,6 +35,7 @@ Two equivalent ways, use whichever suits:
   showName: string,        // the show currently playing
   nextItemName: string,    // next item queued in the project (song, video, …)
   background: string,      // current output background, or ""
+  scripture: Scripture|null,  // set when a bible passage is on screen
   clock: string,           // pre-formatted local time, e.g. "7:04 PM"
   timestamp: number        // ms epoch, if you'd rather format your own
 }
@@ -53,16 +54,52 @@ StageLine = {
   chords: [{ label: string, charIndex: number }],
   spans: [{ text: string, color: string }]   // FreeShow's inline colour runs
 }
+
+Scripture = {
+  reference: string,       // "Genesis 1:2" — the passage on screen
+  book: string,            // "Genesis"
+  bookAbbreviation: string,// "Gen"
+  chapter: string,         // "1"  (a string, that's how FreeShow reports it)
+  verses: string,          // "2", or "2-4" for several on one slide
+  versions: string[],      // ["NKJV", "ESV"], in the order their text appears
+  versionLabel: string,    // "NKJV + ESV"
+  attribution: string      // what an online bible requires you show, or ""
+}
 ```
 
 A slide is not one block of words. FreeShow keeps each text box as its own item, and a bilingual
 show uses that to hold a language in each — the original in the first, the singable
 transliteration in the second. `lines` runs them together; `items` keeps them apart, so a stage
 screen with room for only one language can pick it. `lyrics-chords.html` does exactly that, with
-`ITEM_INDEX` at the top of its script.
+`ITEM_INDEX` at the top of its script — for songs. Scripture is read rather than sung, so it draws
+every translation there; see below.
 
 `chord.charIndex` indexes into `line.text`. An index at or past `text.length` means the chord sits
 past the end of the line — see `lyrics-chords.html` for one way to place both cases.
+
+## Scripture
+
+A bible passage arrives as an ordinary slide — the verse is in `current.lines` like any other
+words, so a template that draws lyrics already draws scripture. What's different is worth knowing:
+
+- `current.group` is the reference, e.g. `"Genesis 1:2"`, so a group tab labels itself. `next` has
+  no group: only the verse actually on screen knows its own reference.
+- Each translation is its own item, exactly as a bilingual song keeps each language in one —
+  `items[0]` is the first version in `scripture.versions`, `items[1]` the second. Both starters
+  draw *all* of them by default, since a reading is followed rather than sung. Set
+  `SCRIPTURE_ITEM_INDEX` at the top of either script to pick just one — `0` for English only if
+  English is your first version. It is the scripture counterpart of `ITEM_INDEX`, and like it,
+  falls back to the last translation rather than to a blank screen if you ask for one that isn't
+  there.
+- FreeShow's scripture layout usually ends with one more item holding the reference and version
+  names. The verses either side of the current one don't get it, so `next` has one item fewer.
+- `showName` is the book and chapter, e.g. `"Genesis 1"`.
+- `scripture` carries the reference already broken up, so you never have to parse it back out of
+  the rendered words. It is `null` for anything that isn't scripture — which is the reliable way
+  to tell the two apart.
+
+Pick the preview's **Scripture** tab while writing a template to work against this shape without
+a live connection.
 
 ## Sizing
 

@@ -53,12 +53,16 @@
     display: none !important;
   }
 
+  /* A starting size, not a fixed one: autofit only ever scales down from here,
+     so a bigger number makes short slides bigger and leaves ones that already
+     filled the screen exactly where they were. Raise it until a long slide is
+     the smallest you would still want to read from the back of the room. */
   #fit {
     display: inline-flex;
     flex-direction: column;
     gap: 1.2vh;
     text-align: center;
-    font-size: 8vh;
+    font-size: 11vh;
     font-weight: 800;
     line-height: 1.15;
     text-wrap: balance;
@@ -150,6 +154,43 @@
     return remoteImages[src];
   }
 
+  // Which translation to show for scripture. A passage keeps each version in its
+  // own text item, so 0 is the first version in `scripture.versions`, 1 the
+  // second. null - the default - shows all of them at once, since a reading is
+  // followed rather than sung. Put 0 here for English only.
+  var SCRIPTURE_ITEM_INDEX = null;
+
+  // The lines to put on screen.
+  //
+  // Scripture arrives with the reference and the translation names as one more
+  // text item after the verse - FreeShow's own scripture layout puts them there.
+  // Blown up to lyric size they crowd out the verse, and the reference is on the
+  // pill above anyway, so that item is left to the footer. It is spotted by
+  // comparing against the values FreeShow resolved rather than by position, so a
+  // customised scripture layout keeps everything it was given.
+  function slideLines(data) {
+    var slide = data.current;
+    if (!data.scripture) return slide.lines;
+
+    var known = [data.scripture.reference, data.scripture.versionLabel];
+    var kept = slide.items.filter(function (item) {
+      return !item.lines.every(function (line) {
+        return known.indexOf(line.text) >= 0;
+      });
+    });
+    if (!kept.length) kept = slide.items;
+
+    // falls back to the last item rather than to nothing, so a passage in fewer
+    // translations than expected still shows a verse
+    if (SCRIPTURE_ITEM_INDEX !== null && kept.length) {
+      return (kept[SCRIPTURE_ITEM_INDEX] || kept[kept.length - 1]).lines;
+    }
+
+    return kept.reduce(function (lines, item) {
+      return lines.concat(item.lines);
+    }, []);
+  }
+
   // Words if the slide has any, otherwise its picture. A slide can have both -
   // lyrics over a still - and then the words are what this screen is for.
   function slideImage(slide) {
@@ -164,9 +205,14 @@
     var media = document.getElementById("media");
 
     document.getElementById("clock").textContent = data.clock;
-    document.getElementById("next").textContent = data.nextItemName
-      ? "Next · " + data.nextItemName
-      : "";
+    // for scripture the footer names the translations instead - there is no next
+    // project item while a passage is up, and an online bible may require the
+    // attribution be shown
+    document.getElementById("next").textContent = data.scripture
+      ? [data.scripture.versionLabel, data.scripture.attribution].filter(Boolean).join(" · ")
+      : data.nextItemName
+        ? "Next · " + data.nextItemName
+        : "";
 
     group.textContent = "";
     lyrics.textContent = "";
@@ -194,7 +240,7 @@
       group.appendChild(pill);
     }
 
-    data.current.lines.forEach(function (line) {
+    slideLines(data).forEach(function (line) {
       var row = document.createElement("div");
       row.textContent = line.text;
       row.style.color = line.color;

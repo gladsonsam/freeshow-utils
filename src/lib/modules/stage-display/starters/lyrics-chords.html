@@ -17,6 +17,16 @@
     padding: 1.5vh;
     background-size: cover;
     background-position: center;
+
+    /* How big the words start out. Everything else in the lyric block - the
+       chords, the strip they sit in - is a ratio of this, so raising it scales
+       the whole thing together and keeps each chord over its character.
+
+       It is a starting size, not a fixed one: autofit only ever scales down
+       from here, so a bigger number makes short slides bigger and leaves ones
+       that were already filling their block exactly where they were. Raise it
+       until a long slide is the smallest you would still want to read. */
+    --lyric-size: 6.4vh;
   }
 
   #card {
@@ -114,9 +124,23 @@
     /* the space between one line's words and the next line's chords - tighter
        than the chord strip above, so each chord reads as belonging to the line
        under it rather than floating between the two */
-    gap: 1.6vh;
+    gap: calc(var(--lyric-size) * 0.35);
     /* scale toward the left edge so autofit never drifts the lines inward */
     transform-origin: left center;
+  }
+
+  /* Scripture is prose, not lyrics: a verse is one very long line, and with
+     nowrap the only way autofit can make it fit is to shrink it to nothing.
+     Bounding the width instead lets it flow onto several lines, leaving autofit
+     just the height to deal with. A line carrying chords must never wrap - the
+     chord strip above it is positioned along a single unbroken row - so this is
+     switched on only for slides that have no chords at all. */
+  .fit.wrap {
+    max-width: 100%;
+  }
+
+  .fit.wrap .text {
+    white-space: normal;
   }
 
   .line {
@@ -129,7 +153,7 @@
      the lyrics around it shrank */
   .chords {
     position: relative;
-    height: 2.4vh;
+    height: calc(var(--lyric-size) * 0.52);
     line-height: 0;
     white-space: nowrap;
   }
@@ -139,7 +163,8 @@
   .chords .ghost {
     opacity: 0;
     line-height: 0;
-    font-size: 4.6vh;
+    /* must match .text exactly, or every chord drifts off its character */
+    font-size: var(--lyric-size);
     font-weight: 700;
   }
 
@@ -148,7 +173,7 @@
     top: 0;
     line-height: 1;
     font-weight: 700;
-    font-size: 3.1vh;
+    font-size: calc(var(--lyric-size) * 0.68);
     color: #f5b400;
     white-space: nowrap;
   }
@@ -159,7 +184,7 @@
   }
 
   .text {
-    font-size: 4.6vh;
+    font-size: var(--lyric-size);
     font-weight: 700;
     line-height: 1.25;
     white-space: nowrap;
@@ -236,15 +261,57 @@
 <script>
   // Which text box to sing from. A bilingual show keeps each language in its own
   // item - the original in the first, the transliteration with the chords in the
-  // second - and a stage screen only has room for one. 0 is the first item, 1
-  // the second, and so on; slides with a single item are unaffected either way.
+  // second - and a stage screen only has room to sing from one. 0 is the first
+  // item, 1 the second, and so on; slides with a single item are unaffected
+  // either way. This applies to songs only - scripture has its own setting.
   var ITEM_INDEX = 1;
 
-  // The chosen item, or the last one if the slide has fewer than that. A slide
-  // with only one item keeps behaving exactly as it always did.
-  function slideLines(slide) {
+  // Which translation to show for scripture, counting the same way: 0 is the
+  // first version in `scripture.versions`, 1 the second. Set it to null to show
+  // all of them at once, which is the default - a reading is followed rather
+  // than sung, so there is usually room for both. Put 0 here for English only.
+  var SCRIPTURE_ITEM_INDEX = null;
+
+  // The passage on screen, or null when this isn't scripture. Set once per
+  // update, before anything below reads it - the whole render is synchronous, so
+  // threading it down through five signatures would buy nothing.
+  var scripture = null;
+
+  // The slide's text boxes, less the one FreeShow's scripture layout adds to
+  // hold the reference and the version names. Those are on the group tab and in
+  // the footer already, and left in they would be read as another translation.
+  // Matched against the values FreeShow resolved rather than by position, so a
+  // customised scripture layout keeps every item it was given.
+  function textItems(slide) {
     var items = slide.items || [];
-    if (items.length < 2) return slide.lines;
+    if (!scripture) return items;
+
+    var known = [scripture.reference, scripture.versionLabel];
+    var kept = items.filter(function (item) {
+      return !item.lines.every(function (line) {
+        return known.indexOf(line.text) >= 0;
+      });
+    });
+    return kept.length ? kept : items;
+  }
+
+  // The lines to draw, picked by whichever of the two settings above applies.
+  // Either one falls back to the last item when it asks for one that isn't
+  // there, so a passage in fewer translations than expected still shows a verse
+  // rather than nothing.
+  function slideLines(slide) {
+    var items = textItems(slide);
+
+    if (scripture) {
+      if (SCRIPTURE_ITEM_INDEX === null || !items.length) {
+        return items.reduce(function (lines, item) {
+          return lines.concat(item.lines);
+        }, []);
+      }
+      return (items[SCRIPTURE_ITEM_INDEX] || items[items.length - 1]).lines;
+    }
+
+    if (items.length < 2) return items.length ? items[0].lines : slide.lines;
     return (items[ITEM_INDEX] || items[items.length - 1]).lines;
   }
 
@@ -329,11 +396,17 @@
   function slideHtml(slide) {
     var groupStyle = slide.color ? ' style="background:' + esc(slide.color) + '"' : "";
     var image = slideImage(slide);
+    var lines = slideLines(slide);
+    var chorded = lines.some(function (line) {
+      return line.chords.length;
+    });
 
     var body = image
       ? '<div class="lyrics media"><img alt="" src="' + esc(image) + '"></div>'
-      : '<div class="lyrics"><div class="fit">' +
-        slideLines(slide).map(lineHtml).join("") +
+      : '<div class="lyrics"><div class="fit' +
+        (chorded ? "" : " wrap") +
+        '">' +
+        lines.map(lineHtml).join("") +
         "</div></div>";
 
     return (
@@ -389,6 +462,8 @@
   function render(data) {
     if (!data) return;
 
+    scripture = data.scripture;
+
     var stage = document.getElementById("stage");
     var placeholder = document.getElementById("placeholder");
     var blocks = document.getElementById("blocks");
@@ -420,7 +495,11 @@
     }
 
     document.getElementById("showName").textContent = data.showName || "—";
-    document.getElementById("nextName").textContent = data.nextItemName || "—";
+    // there is no next project item while a passage is up, so that pill names the
+    // translations instead - and carries the attribution an online bible requires
+    document.getElementById("nextName").textContent = scripture
+      ? [scripture.versionLabel, scripture.attribution].filter(Boolean).join(" · ") || "—"
+      : data.nextItemName || "—";
     document.getElementById("clock").textContent = data.clock;
   }
 
