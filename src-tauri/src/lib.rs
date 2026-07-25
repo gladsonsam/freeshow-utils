@@ -20,18 +20,21 @@ pub fn run() {
             templates::templates_folder,
             output_window::place_output_window,
         ])
+        .setup(|app| {
+            build_tray(app.handle())?;
+            Ok(())
+        })
         .on_window_event(|window, event| {
-            use tauri::Manager;
-
-            // Output windows are borderless and often on a screen the operator
-            // isn't looking at, so closing the control window has to take them
-            // down too - otherwise the app "quits" and leaves a stage display up
-            // with no way left to close it. Done here rather than in the
-            // frontend because it has to hold even if the frontend is wedged.
-            if matches!(event, tauri::WindowEvent::CloseRequested { .. })
-                && window.label() == "main"
-            {
-                close_output_windows(window.app_handle());
+            // Closing the main window drops it to the system tray instead of
+            // quitting - a stage display run from a laptop needs to survive the
+            // operator dismissing the control window. Output windows are left
+            // alone here; real quitting (and tearing them down) only happens
+            // through the tray menu now.
+            if window.label() == "main" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
             }
         })
         .run(tauri::generate_context!())
@@ -47,5 +50,48 @@ fn close_output_windows(app: &tauri::AppHandle) {
         if label.starts_with(output_window::OUTPUT_LABEL_PREFIX) {
             let _ = window.destroy();
         }
+    }
+}
+
+/// The main window hides instead of closing, so a tray icon is the only way
+/// left to bring it back or quit for real.
+fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
+    use tauri::{
+        menu::{Menu, MenuItem},
+        tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    };
+
+    let show = MenuItem::with_id(app, "show", "Show FreeShow Utils", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show, &quit])?;
+
+    TrayIconBuilder::new()
+        .icon(app.default_window_icon().cloned().expect("app has a default icon"))
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "show" => show_main(app),
+            "quit" => {
+                close_output_windows(app);
+                app.exit(0);
+            }
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+                show_main(tray.app_handle());
+            }
+        })
+        .build(app)?;
+
+    Ok(())
+}
+
+fn show_main(app: &tauri::AppHandle) {
+    use tauri::Manager;
+
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
     }
 }
