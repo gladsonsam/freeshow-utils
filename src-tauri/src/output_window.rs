@@ -179,7 +179,7 @@ fn monitor_number(target: &MonitorTarget) -> Option<i32> {
         }
     }
 
-    (target.index < count as usize).then(|| target.index as i32)
+    (target.index < count as usize).then_some(target.index as i32)
 }
 
 #[cfg(target_os = "linux")]

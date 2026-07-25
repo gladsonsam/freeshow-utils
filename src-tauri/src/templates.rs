@@ -125,7 +125,7 @@ pub fn list_templates(app: AppHandle) -> Result<Vec<TemplateMeta>, String> {
     let mut templates = Vec::new();
     for entry in entries.flatten() {
         let path = entry.path();
-        if !path.is_file() || path.extension().map_or(true, |ext| ext != "html") {
+        if !path.is_file() || path.extension().is_none_or(|ext| ext != "html") {
             continue;
         }
         let stem = match path.file_stem().and_then(|s| s.to_str()) {
