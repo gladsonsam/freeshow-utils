@@ -21,11 +21,22 @@ export function displayLabel(display: Display): string {
   return `${display.name} — ${display.width} × ${display.height}${display.primary ? " (primary)" : ""}`;
 }
 
+/**
+ * Platforms hand back wildly different monitor names - a real model name on
+ * some, a bare handle like "0x403D" on X11/Wayland. Anything that isn't
+ * recognisably a name gets a plain ordinal instead.
+ */
+function readableName(name: string | null, index: number): string {
+  const trimmed = (name || "").trim();
+  const isHandle = !trimmed || /^0x[0-9a-f]+$/i.test(trimmed) || /^\d+$/.test(trimmed);
+  return isHandle ? `Display ${index + 1}` : trimmed;
+}
+
 function toDisplay(monitor: Monitor, index: number): Display {
   const scale = monitor.scaleFactor || 1;
   return {
     index,
-    name: monitor.name || `Display ${index + 1}`,
+    name: readableName(monitor.name, index),
     x: Math.round(monitor.position.x / scale),
     y: Math.round(monitor.position.y / scale),
     width: Math.round(monitor.size.width / scale),

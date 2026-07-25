@@ -10,6 +10,9 @@
  */
 
 :root {
+  /* makes the webview render native controls (checkboxes, dropdowns) dark */
+  color-scheme: dark;
+
   --primary: #242832;
   --primary-lighter: #2f3542;
   --primary-darker: #191923;
@@ -98,6 +101,27 @@ textarea:focus,
 select:focus {
   outline: none;
   border-color: var(--secondary);
+}
+
+/* the platform dropdown ignores most styling, so draw our own control + chevron */
+select {
+  appearance: none;
+  padding-right: calc(var(--space-3) + 14px);
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-dim) 50%),
+    linear-gradient(135deg, var(--text-dim) 50%, transparent 50%);
+  background-position:
+    right 14px center,
+    right 9px center;
+  background-size:
+    5px 5px,
+    5px 5px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+
+option {
+  background: var(--primary-darker);
+  color: var(--text);
 }
 
 input::placeholder,

@@ -14,8 +14,9 @@ framework, nothing to learn beyond the page you already know how to write.
 - A gallery of templates, stored as ordinary `.html` files you can import, export and share
 - A built-in editor (CodeMirror) with a live preview, fed either real FreeShow data or sample data
   when FreeShow isn't running
-- "Activate" opens a borderless output window you can drag onto a stage monitor; each output
-  window holds its own connection, so it keeps updating on its own
+- Pick which connected display the output goes to (optionally fullscreen), then "Activate" opens
+  a borderless window on it; each output window holds its own connection, so it keeps updating on
+  its own
 - Ships with three starter templates — Lyrics & Chords, Big Lyrics, and a Data Inspector
 
 The app only ever **reads** from FreeShow. It subscribes to the Stage output feed and issues
