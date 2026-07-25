@@ -72,9 +72,14 @@ export const STARTER_SKELETON = `<style>
  * deleted stays deleted.
  */
 export async function seedStarters(): Promise<void> {
-  if (typeof localStorage !== "undefined" && localStorage.getItem(SEEDED_KEY)) return;
+  const seenBefore = typeof localStorage !== "undefined" && !!localStorage.getItem(SEEDED_KEY);
+  const templates = await listTemplates();
 
-  const existing = new Set((await listTemplates()).map((template) => template.id));
+  // an empty folder always re-seeds, so a user who cleared everything (or moved
+  // machines with their settings but not their files) isn't left with nothing
+  if (seenBefore && templates.length) return;
+
+  const existing = new Set(templates.map((template) => template.id));
   const created = new Date().toISOString();
 
   for (const starter of starters) {
