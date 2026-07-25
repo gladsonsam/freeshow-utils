@@ -1,0 +1,129 @@
+name: Release
+
+# Cutting a release:
+#
+#   npm run version:set 0.2.0      # writes all four version fields at once
+#   npm run check                  # must be 0 errors, 0 warnings
+#   git commit -am "release v0.2.0"
+#   git tag v0.2.0
+#   git push --follow-tags
+#
+# That builds installers on each platform and attaches them to a DRAFT release,
+# which you publish by hand from the Releases tab once the notes look right.
+#
+# Windows gets a .exe (NSIS) and .msi; Linux gets .AppImage, .deb and .rpm.
+# Nothing is code-signed, so Windows SmartScreen warns on first run — that needs
+# an Authenticode certificate, which this repo doesn't have. There's no updater
+# either; users upgrade by downloading a new installer.
+#
+# If one platform fails for an infrastructure reason, don't re-tag — rerun
+# against the existing tag with: gh workflow run release.yml -f tag=v0.2.0
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)build, e.g. v0.2.0"
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Fail in ten seconds rather than after two platform builds if the tag and the
+  # version in the repo disagree — the bundles are named from the repo version,
+  # so a mismatch ships v0.2.0 assets full of 0.1.0 binaries.
+  verify:
+    name: Verify version matches tag
+    runs-on: ubuntu-22.04
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - id: tag
+        run: echo "tag=${{ inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+
+      - run: node scripts/version.mjs --check "${{ steps.tag.outputs.tag }}"
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: verify
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 22.04 rather than latest: the AppImage and .deb link against the
+          # build machine's glibc, so building on the oldest supported runner is
+          # what makes them install on older distros.
+          - name: Linux (x86_64)
+            platform: ubuntu-22.04
+            args: ""
+          - name: Windows (x64)
+            platform: windows-latest
+            args: ""
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.verify.outputs.tag }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: ${{ matrix.platform }}
+
+      - name: Install Tauri system dependencies
+        if: startsWith(matrix.platform, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            libssl-dev \
+            patchelf \
+            build-essential \
+            curl \
+            wget \
+            file
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ needs.verify.outputs.tag }}
+          releaseName: FreeShow Utils ${{ needs.verify.outputs.tag }}
+          releaseBody: |
+            ### Downloads
+
+            - **Windows** — `.exe` installer (`-setup.exe`). Windows SmartScreen will warn
+              on first run because the build is unsigned: choose *More info → Run anyway*.
+            - **Linux** — `.AppImage` (mark executable and run), `.deb` (Debian/Ubuntu),
+              or `.rpm` (Fedora/openSUSE).
+
+            See the commit log below for what changed.
+          # Land as a draft so the release notes can be edited before anyone is
+          # notified; publishing is a click in the Releases UI.
+          releaseDraft: true
+          prerelease: false
+          includeUpdaterJson: false
+          args: ${{ matrix.args }}
