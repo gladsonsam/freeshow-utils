@@ -144,6 +144,9 @@ export async function openOutputWindow(
     // alt-tabs to - each one showing up as its own taskbar entry just spams
     // the taskbar, especially with several running at once
     skipTaskbar: true,
+    // it's a monitor the congregation/stage is looking at continuously - it
+    // must not get buried behind whatever the operator clicks on next
+    alwaysOnTop: true,
   });
 
   await new Promise<void>((resolve, reject) => {

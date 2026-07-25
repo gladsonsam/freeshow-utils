@@ -8,8 +8,10 @@
 //! which GTK exposes as `gtk_window_fullscreen_on_monitor`.
 //!
 //! So on Linux the display choice is applied through GTK rather than through the
-//! window builder. Everywhere else the builder is already correct and this is a
-//! no-op that reports back so the caller can take the ordinary path.
+//! window builder. Everywhere else the builder already places the window
+//! correctly, so this command is a no-op for placement - except on Windows,
+//! where it also excludes the output from Aero Peek (see the Windows `place`
+//! below), which the window builder has no option for.
 
 use serde::{Deserialize, Serialize};
 
@@ -60,13 +62,57 @@ pub async fn place_output_window(
     place(app, label, target, fullscreen)
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "macos")]
 fn place(
     _app: tauri::AppHandle,
     _label: String,
     _target: Option<MonitorTarget>,
     _fullscreen: bool,
 ) -> Result<Placement, String> {
+    Ok(Placement::new("unsupported"))
+}
+
+// Windows honours the window builder's x/y/always-on-top directly, so there is
+// no monitor placement to do here. What it won't do on its own is keep the
+// output visible through Aero Peek - hovering the "Show desktop" corner (or
+// Win+, ) fades every window to an outline to preview the desktop, always-on-top
+// or not. DWMWA_EXCLUDED_FROM_PEEK is the documented opt-out other overlay apps
+// (subtitle/OSD tools) use for exactly this. It does not affect an actual Show
+// Desktop click/Win+D, which minimizes every top-level window regardless of
+// z-order - there's no supported way to opt out of that short of intercepting
+// WM_SYSCOMMAND, which is a much larger change than this warrants.
+#[cfg(target_os = "windows")]
+fn place(
+    app: tauri::AppHandle,
+    label: String,
+    _target: Option<MonitorTarget>,
+    _fullscreen: bool,
+) -> Result<Placement, String> {
+    use tauri::Manager;
+    use windows::Win32::Foundation::BOOL;
+    use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_EXCLUDED_FROM_PEEK};
+
+    let window = app
+        .get_webview_window(&label)
+        .ok_or_else(|| format!("no window labelled {label}"))?;
+    let hwnd = window.hwnd().map_err(|error| error.to_string())?;
+
+    let exclude = BOOL(1);
+    let result = unsafe {
+        DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_EXCLUDED_FROM_PEEK,
+            &exclude as *const BOOL as *const _,
+            std::mem::size_of::<BOOL>() as u32,
+        )
+    };
+    if let Err(error) = result {
+        return Ok(Placement::warn(
+            "unsupported",
+            format!("Could not exclude the output from Aero Peek: {error}"),
+        ));
+    }
+
     Ok(Placement::new("unsupported"))
 }
 

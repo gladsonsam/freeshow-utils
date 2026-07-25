@@ -1046,6 +1046,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-opener",
  "tokio",
+ "windows",
 ]
 
 [[package]]
