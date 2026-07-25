@@ -1,14 +1,18 @@
 <script lang="ts">
   import { freeshowClient } from "$lib/core/freeshowClient";
   import { appModules, findModule } from "$lib/modules/registry";
+  import AppSettingsModal from "$lib/shell/AppSettingsModal.svelte";
   import ConnectionSettingsModal from "$lib/shell/ConnectionSettingsModal.svelte";
   import ConnectionIndicator from "$lib/ui/ConnectionIndicator.svelte";
+  import Icon from "$lib/ui/Icon.svelte";
+  import IconButton from "$lib/ui/IconButton.svelte";
   import Sidebar from "$lib/ui/Sidebar.svelte";
 
   const status = freeshowClient.status;
 
   let activeId = $state(appModules[0].id);
-  let settingsOpen = $state(false);
+  let connectionSettingsOpen = $state(false);
+  let appSettingsOpen = $state(false);
 
   let active = $derived(findModule(activeId));
 </script>
@@ -21,7 +25,12 @@
     onSelect={(id) => (activeId = id)}
   >
     {#snippet footer()}
-      <ConnectionIndicator status={$status} onclick={() => (settingsOpen = true)} />
+      <div class="sidebar-foot-row">
+        <ConnectionIndicator status={$status} onclick={() => (connectionSettingsOpen = true)} />
+        <IconButton title="App settings" onclick={() => (appSettingsOpen = true)}>
+          <Icon name="settings" />
+        </IconButton>
+      </div>
     {/snippet}
   </Sidebar>
 
@@ -39,7 +48,11 @@
   </main>
 </div>
 
-<ConnectionSettingsModal open={settingsOpen} onClose={() => (settingsOpen = false)} />
+<ConnectionSettingsModal
+  open={connectionSettingsOpen}
+  onClose={() => (connectionSettingsOpen = false)}
+/>
+<AppSettingsModal open={appSettingsOpen} onClose={() => (appSettingsOpen = false)} />
 
 <style>
   .app {
@@ -47,6 +60,13 @@
     height: 100vh;
     width: 100vw;
     overflow: hidden;
+  }
+
+  .sidebar-foot-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
   }
 
   .main {

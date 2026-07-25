@@ -1,12 +1,19 @@
 mod output_window;
 mod python;
+mod settings;
 mod templates;
+
+use std::sync::atomic::Ordering;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .invoke_handler(tauri::generate_handler![
             python::execute_python_script,
             python::list_scripts,
@@ -19,21 +26,41 @@ pub fn run() {
             templates::write_templates_readme,
             templates::templates_folder,
             output_window::place_output_window,
+            settings::get_close_to_tray,
+            settings::set_close_to_tray,
         ])
         .setup(|app| {
-            build_tray(app.handle())?;
+            use tauri::Manager;
+
+            let handle = app.handle().clone();
+            app.manage(settings::load(&handle));
+            build_tray(&handle)?;
             Ok(())
         })
         .on_window_event(|window, event| {
+            use tauri::Manager;
+
             // Closing the main window drops it to the system tray instead of
-            // quitting - a stage display run from a laptop needs to survive the
-            // operator dismissing the control window. Output windows are left
-            // alone here; real quitting (and tearing them down) only happens
-            // through the tray menu now.
+            // quitting, unless the operator has turned that off in Settings - a
+            // stage display run from a laptop needs to survive the operator
+            // dismissing the control window, but not everyone wants a
+            // background process left running. Output windows are left alone
+            // either way; real quitting (and tearing them down) only happens
+            // through the tray menu or this fallback path.
             if window.label() == "main" {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                    api.prevent_close();
-                    let _ = window.hide();
+                    let app = window.app_handle();
+                    let close_to_tray = app
+                        .state::<settings::AppSettingsState>()
+                        .close_to_tray
+                        .load(Ordering::Relaxed);
+
+                    if close_to_tray {
+                        api.prevent_close();
+                        let _ = window.hide();
+                    } else {
+                        close_output_windows(app);
+                    }
                 }
             }
         })
