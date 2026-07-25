@@ -453,6 +453,9 @@
     background: var(--primary);
     border: 1px solid var(--line);
     border-radius: var(--radius);
+    /* the preview thumbnail is a black rectangle filling the card's top edge -
+       without this it paints square corners over the rounded border */
+    overflow: hidden;
     transition: border-color var(--transition);
   }
 
