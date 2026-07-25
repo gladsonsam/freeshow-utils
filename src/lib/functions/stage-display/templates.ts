@@ -1,10 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
-import { starters } from "./starters";
+import { starters, startersReadme } from "./starters";
 
 export type TemplateMeta = { id: string; name: string; created: string };
 export type Template = TemplateMeta & { html: string };
 
-const SEEDED_KEY = "freeshow-utils.starters-seeded";
+const SEEDED_KEY = "freeshow-utils.starters-seeded.v2";
 
 export const listTemplates = () => invoke<TemplateMeta[]>("list_templates");
 
@@ -27,6 +27,9 @@ export const exportTemplateFile = (id: string, destPath: string) =>
   invoke<void>("export_template_file", { id, destPath });
 
 export const templatesFolder = () => invoke<string>("templates_folder");
+
+const writeTemplatesReadme = (contents: string) =>
+  invoke<void>("write_templates_readme", { contents });
 
 /** ids double as filenames and window labels, so keep them url/path safe */
 export function newTemplateId(): string {
@@ -78,6 +81,7 @@ export async function seedStarters(): Promise<void> {
     if (existing.has(starter.id)) continue;
     await writeTemplate({ ...starter, created });
   }
+  await writeTemplatesReadme(startersReadme);
 
   localStorage?.setItem(SEEDED_KEY, "1");
 }

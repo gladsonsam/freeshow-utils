@@ -1,8 +1,12 @@
 import bigLyrics from "./big-lyrics.html?raw";
 import dataInspector from "./data-inspector.html?raw";
 import lyricsChords from "./lyrics-chords.html?raw";
+import readme from "./README.md?raw";
 
 export type Starter = { id: string; name: string; html: string };
+
+/** the authoring guide, copied into the templates folder alongside the starters */
+export const startersReadme = readme;
 
 /**
  * Bundled into the app and copied into the templates folder on first run. After

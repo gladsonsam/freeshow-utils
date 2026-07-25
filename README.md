@@ -5,73 +5,102 @@ independent functions.
 
 ## Functions
 
-- **Stage Display** — live lyrics, chords and cues on a second screen, rendered by templates you
-  write yourself in plain HTML/CSS/JS
-- **Text Processor** — run a Python script over pasted text and copy the result back out
+### Stage Display
+
+Live lyrics, chords and cues on a second screen — rendered by templates **you** write, in plain
+HTML, CSS and JavaScript. Same idea as a browser source in OBS or vMix: no build step, no
+framework, nothing to learn beyond the page you already know how to write.
+
+- A gallery of templates, stored as ordinary `.html` files you can import, export and share
+- A built-in editor (CodeMirror) with a live preview, fed either real FreeShow data or sample data
+  when FreeShow isn't running
+- "Activate" opens a borderless output window you can drag onto a stage monitor; each output
+  window holds its own connection, so it keeps updating on its own
+- Ships with three starter templates — Lyrics & Chords, Big Lyrics, and a Data Inspector
+
+The app only ever **reads** from FreeShow. It subscribes to the Stage output feed and issues
+`get_*` queries; it never sends anything that would control or change a running service.
+
+### Text Processor
+
+Run a Python script over pasted text and copy the result back out. Point it at a folder of `.py`
+files; each script reads stdin and writes stdout.
+
+## Setting up FreeShow
+
+In FreeShow, under **Settings → Connections**, enable:
+
+- **Stage Output** (default port `5511`) — the live output feed
+- **REST / Companion API** (default port `5505`) — used only to resolve what's queued next in the
+  project, which the Stage protocol can't report
+
+FreeShow also needs at least one **Stage Show** to exist. It is used purely as a routing pointer
+saying which output to mirror — FreeShow Utils ignores its layout entirely and renders your own
+template instead.
+
+Host and ports are configurable from the connection indicator at the bottom of the sidebar.
+
+## Writing a template
+
+See [the template guide](src/lib/functions/stage-display/starters/README.md) for the full data
+contract and a worked example. The short version:
+
+```html
+<div id="line"></div>
+<script>
+  window.onFreeShowUpdate = function (data) {
+    document.getElementById("line").textContent = data.current ? data.current.lines[0].text : "";
+  };
+</script>
+```
+
+Templates run in a sandboxed iframe (`sandbox="allow-scripts"`) — no network access, no access to
+the app around them. Data arrives via `postMessage`.
+
+## Project layout
+
+```
+src/lib/core/         FreeShow connector + the resolved data model (framework-agnostic)
+src/lib/ui/           shared themed primitives (Sidebar, Button, Panel, Modal, Tabs)
+src/lib/shell/        app-level chrome (connection settings)
+src/lib/functions/    one folder per function, plus registry.ts listing them
+src/routes/           app shell (/) and the stage output window (/output)
+src-tauri/src/        Rust commands, grouped by concern (python.rs, templates.rs)
+```
+
+Adding a function is one entry in `src/lib/functions/registry.ts` plus one folder — the shell
+renders the sidebar straight from that list.
 
 ## Requirements
 
-- Python 3.x installed and available in your PATH (as `python` or `python3`)
-- Node.js and npm (for development)
+- Node.js and npm
 - Rust (for building the Tauri app)
+- Python 3.x on your PATH, for the Text Processor only
 
 ## Development
 
-### Install Dependencies
-
 ```bash
 npm install
+npm run tauri dev      # run
+npm run check          # type-check
+npm run tauri build    # package
 ```
 
-### Run in Development Mode
+## Python script format
 
-```bash
-npm run tauri dev
-```
-
-### Build for Production
-
-```bash
-npm run tauri build
-```
-
-## Usage
-
-1. **Select a Python Script**: Click "Select Python Script" and choose a `.py` file
-2. **Enter Input Text**: Type or paste your text into the input area
-3. **Execute**: Click "Execute Script" to run your Python script
-4. **View Output**: The processed text will appear in the output area
-
-## Python Script Format
-
-Your Python scripts should:
-- Read input from `stdin`
-- Process the text as needed
-- Write output to `stdout`
-
-### Example Script
-
-See `example_script.py` for a simple example that converts text to uppercase.
+Scripts read stdin and write stdout:
 
 ```python
 import sys
 
 def process_text(text):
-    # Your processing logic here
     return text.upper()
 
 if __name__ == "__main__":
-    input_text = sys.stdin.read()
-    output_text = process_text(input_text)
-    print(output_text, end='')
+    print(process_text(sys.stdin.read()), end="")
 ```
 
-## Future Features
-
-- **Bulk Mode**: Process multiple files at once
-- **File Mode**: Direct file input/output
-- **Script Library**: Save and reuse favorite scripts
-- **Template System**: Pre-built templates for common tasks
+See `scripts/example_script.py`.
 
 ## Recommended IDE Setup
 

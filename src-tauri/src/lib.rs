@@ -15,6 +15,7 @@ pub fn run() {
             templates::delete_template,
             templates::read_template_file,
             templates::export_template_file,
+            templates::write_templates_readme,
             templates::templates_folder,
         ])
         .run(tauri::generate_context!())

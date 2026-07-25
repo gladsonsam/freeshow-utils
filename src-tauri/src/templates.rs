@@ -213,6 +213,14 @@ pub fn export_template_file(app: AppHandle, id: String, dest_path: String) -> Re
     fs::write(&dest_path, contents).map_err(|e| format!("Could not write {}: {}", dest_path, e))
 }
 
+/// Drop the template-authoring guide next to the templates themselves, so it's
+/// there when someone opens the folder.
+#[tauri::command]
+pub fn write_templates_readme(app: AppHandle, contents: String) -> Result<(), String> {
+    let path = templates_dir(&app)?.join("README.md");
+    fs::write(&path, contents).map_err(|e| format!("Could not write the template guide: {}", e))
+}
+
 #[tauri::command]
 pub fn templates_folder(app: AppHandle) -> Result<String, String> {
     Ok(templates_dir(&app)?.to_string_lossy().to_string())
