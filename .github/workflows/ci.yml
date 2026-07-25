@@ -18,9 +18,9 @@ jobs:
     name: Frontend (svelte-check + build)
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -41,9 +41,12 @@ jobs:
     name: Rust (clippy)
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: dtolnay/rust-toolchain@stable
+      # Pinned, not `stable`: with `-D warnings`, every clippy release that adds
+      # a lint would turn CI red on a commit that changed nothing. Bump this
+      # deliberately and fix the new lints in their own commit.
+      - uses: dtolnay/rust-toolchain@1.97.0
         with:
           components: clippy
 

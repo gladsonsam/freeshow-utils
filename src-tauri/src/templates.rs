@@ -142,7 +142,7 @@ pub fn list_templates(app: AppHandle) -> Result<Vec<TemplateMeta>, String> {
         });
     }
 
-    templates.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    templates.sort_by_key(|a| a.name.to_lowercase());
     Ok(templates)
 }
 
