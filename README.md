@@ -1,13 +1,13 @@
-# FreeShow Formatter
+# FreeShow Utils
 
-A desktop application that allows you to process text using Python scripts. Perfect for formatting FreeShow presentations, bulk processing, and custom text transformations.
+A lightweight desktop companion for [FreeShow](https://freeshow.app), built as a set of
+independent functions.
 
-## Features
+## Functions
 
-- **Python Script Execution**: Run custom Python scripts to process your text
-- **Simple Interface**: Clean, modern UI for selecting scripts and inputting text
-- **Error Handling**: Clear error messages when scripts fail
-- **Real-time Output**: See results instantly after script execution
+- **Stage Display** — live lyrics, chords and cues on a second screen, rendered by templates you
+  write yourself in plain HTML/CSS/JS
+- **Text Processor** — run a Python script over pasted text and copy the result back out
 
 ## Requirements
 

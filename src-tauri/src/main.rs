@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    freeshow_formatter_lib::run()
+    freeshow_utils_lib::run()
 }
