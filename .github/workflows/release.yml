@@ -127,3 +127,16 @@ jobs:
           prerelease: false
           includeUpdaterJson: false
           args: ${{ matrix.args }}
+
+      # The AppImage linuxdeploy produces aborts at startup on any distro whose
+      # wayland is newer than this runner's - see the script for why. Fix it and
+      # overwrite the asset tauri-action just uploaded.
+      - name: Fix and re-upload AppImage
+        if: startsWith(matrix.platform, 'ubuntu')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.verify.outputs.tag }}
+        run: |
+          appimage=$(ls src-tauri/target/release/bundle/appimage/*.AppImage)
+          scripts/fix-appimage-wayland.sh "$appimage"
+          gh release upload "$TAG" "$appimage" --clobber
