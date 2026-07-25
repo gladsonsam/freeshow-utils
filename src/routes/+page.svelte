@@ -2,6 +2,9 @@
   import { invoke } from "@tauri-apps/api/core";
   import { open } from "@tauri-apps/plugin-dialog";
   import { onMount } from "svelte";
+  import StageDisplay from "./StageDisplay.svelte";
+
+  let activeTool = $state<"text-processor" | "stage-display">("text-processor");
 
   let scriptsFolder = $state<string | null>(null);
   let scriptsList = $state<string[]>([]);
@@ -155,8 +158,27 @@
     <div class="sidebar-header">
       <h2 class="app-title">FreeShow Formatter</h2>
     </div>
-    
-    <div class="sidebar-content">
+
+    <nav class="tool-nav">
+      <button
+        type="button"
+        class="tool-nav-item"
+        class:active={activeTool === "text-processor"}
+        onclick={() => (activeTool = "text-processor")}
+      >
+        📝 Text Processor
+      </button>
+      <button
+        type="button"
+        class="tool-nav-item"
+        class:active={activeTool === "stage-display"}
+        onclick={() => (activeTool = "stage-display")}
+      >
+        🎤 Stage Display
+      </button>
+    </nav>
+
+    <div class="sidebar-content" class:hidden={activeTool !== "text-processor"}>
       <div class="folder-section">
         <div class="folder-buttons">
           <button type="button" class="folder-button" onclick={selectScriptsFolder}>
@@ -201,81 +223,90 @@
 
   <!-- Main Content -->
   <main class="main-content">
-    <div class="content-header">
-      <h1 class="page-title">Text Processor</h1>
-      {#if selectedScript}
-        <div class="selected-script">
-          <span class="script-label">Active:</span>
-          <span class="script-name">{getScriptName(selectedScript)}</span>
-        </div>
-      {/if}
-    </div>
-
-    <div class="content-body">
-      <!-- Input Section -->
-      <section class="input-section">
-        <div class="section-header">
-          <h2 class="section-title">Input Text</h2>
-        </div>
-        <textarea
-          id="input-text"
-          class="textarea input-textarea"
-          bind:value={inputText}
-          placeholder="Enter or paste your text here..."
-          rows="12"
-        ></textarea>
-      </section>
-
-      <!-- Action Buttons -->
-      <div class="action-buttons">
-        <button
-          type="button"
-          class="button execute-button"
-          onclick={executeScript}
-          disabled={isLoading || !selectedScript || !inputText.trim()}
-        >
-          {isLoading ? "⏳ Executing..." : "▶ Execute Script"}
-        </button>
-        {#if outputText || errorMessage}
-          <button type="button" class="button clear-button" onclick={clearOutput}>
-            🗑 Clear
-          </button>
+    {#if activeTool === "text-processor"}
+      <div class="content-header">
+        <h1 class="page-title">Text Processor</h1>
+        {#if selectedScript}
+          <div class="selected-script">
+            <span class="script-label">Active:</span>
+            <span class="script-name">{getScriptName(selectedScript)}</span>
+          </div>
         {/if}
       </div>
 
-      <!-- Error Message -->
-      {#if errorMessage}
-        <div class="error-box">
-          <strong>Error:</strong> {errorMessage}
-        </div>
-      {/if}
-
-      <!-- Output Section -->
-      {#if showOutput || outputText}
-        <section class="output-section">
+      <div class="content-body">
+        <!-- Input Section -->
+        <section class="input-section">
           <div class="section-header">
-            <h2 class="section-title">Output Text</h2>
-            {#if outputText}
-              <button
-                type="button"
-                class="button copy-button"
-                onclick={copyToClipboard}
-                title="Copy to clipboard"
-              >
-                {copySuccess ? "✓ Copied!" : "📋 Copy"}
-              </button>
-            {/if}
+            <h2 class="section-title">Input Text</h2>
           </div>
           <textarea
-            id="output-text"
-            class="textarea output-textarea"
-            bind:value={outputText}
+            id="input-text"
+            class="textarea input-textarea"
+            bind:value={inputText}
+            placeholder="Enter or paste your text here..."
             rows="12"
-            placeholder="Output will appear here after script execution..."
           ></textarea>
         </section>
-      {/if}
-    </div>
+
+        <!-- Action Buttons -->
+        <div class="action-buttons">
+          <button
+            type="button"
+            class="button execute-button"
+            onclick={executeScript}
+            disabled={isLoading || !selectedScript || !inputText.trim()}
+          >
+            {isLoading ? "⏳ Executing..." : "▶ Execute Script"}
+          </button>
+          {#if outputText || errorMessage}
+            <button type="button" class="button clear-button" onclick={clearOutput}>
+              🗑 Clear
+            </button>
+          {/if}
+        </div>
+
+        <!-- Error Message -->
+        {#if errorMessage}
+          <div class="error-box">
+            <strong>Error:</strong> {errorMessage}
+          </div>
+        {/if}
+
+        <!-- Output Section -->
+        {#if showOutput || outputText}
+          <section class="output-section">
+            <div class="section-header">
+              <h2 class="section-title">Output Text</h2>
+              {#if outputText}
+                <button
+                  type="button"
+                  class="button copy-button"
+                  onclick={copyToClipboard}
+                  title="Copy to clipboard"
+                >
+                  {copySuccess ? "✓ Copied!" : "📋 Copy"}
+                </button>
+              {/if}
+            </div>
+            <textarea
+              id="output-text"
+              class="textarea output-textarea"
+              bind:value={outputText}
+              rows="12"
+              placeholder="Output will appear here after script execution..."
+            ></textarea>
+          </section>
+        {/if}
+      </div>
+    {:else}
+      <div class="content-header">
+        <h1 class="page-title">Stage Display</h1>
+      </div>
+      <div class="content-body stage-body">
+        <StageDisplay />
+      </div>
+    {/if}
   </main>
 </div>
 
@@ -322,10 +353,43 @@
     background-clip: text;
   }
 
+  .tool-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 1rem 1rem 0;
+  }
+
+  .tool-nav-item {
+    text-align: left;
+    padding: 0.65rem 0.9rem;
+    background: transparent;
+    color: #a0a0a0;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .tool-nav-item:hover {
+    background: #2d2d30;
+    color: #e0e0e0;
+  }
+
+  .tool-nav-item.active {
+    background: #37373d;
+    color: #ffffff;
+  }
+
   .sidebar-content {
     flex: 1;
     overflow-y: auto;
     padding: 1rem;
+  }
+
+  .sidebar-content.hidden {
+    display: none;
   }
 
   .folder-section {
