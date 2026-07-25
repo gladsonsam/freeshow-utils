@@ -1,20 +1,9 @@
 <script lang="ts">
-  import { onDestroy } from "svelte";
-  import { connectionSettings } from "$lib/core/connectionSettings";
   import { freeshowClient } from "$lib/core/freeshowClient";
   import { stageData } from "$lib/core/stageState";
   import type { StageLine, SlideView } from "$lib/core/types";
 
   const status = freeshowClient.status;
-  const errorMessage = freeshowClient.errorMessage;
-
-  let controlsOpen = $state(true);
-
-  $effect(() => {
-    if ($status === "connected") controlsOpen = false;
-  });
-
-  onDestroy(() => freeshowClient.disconnect());
 
   // splits e.g. "C#m7" -> base "C#m", superscript "7"; "B/D#" -> base "B/D#", no superscript
   function formatChord(key: string): { base: string; sup: string; suffix: string } {
@@ -83,44 +72,6 @@
   class="stage-tool"
   style={$stageData.background ? `background-image: url(${$stageData.background})` : ""}
 >
-  <button
-    type="button"
-    class="controls-toggle"
-    onclick={() => (controlsOpen = !controlsOpen)}
-    title="Connection settings"
-  >
-    <span class="dot" class:live={$status === "connected"}></span>
-  </button>
-
-  {#if controlsOpen}
-    <div class="controls">
-      <input
-        class="conn-input"
-        bind:value={$connectionSettings.host}
-        placeholder="host"
-        disabled={$status !== "disconnected"}
-      />
-      <span class="colon">:</span>
-      <input
-        class="conn-input port"
-        bind:value={$connectionSettings.stagePort}
-        placeholder="port"
-        disabled={$status !== "disconnected"}
-      />
-      {#if $status === "disconnected" || $status === "no-hook"}
-        <button class="button connect-button" onclick={() => freeshowClient.connect()}>Connect</button>
-      {:else}
-        <button class="button disconnect-button" onclick={() => freeshowClient.disconnect()}>
-          {$status === "connecting" ? "Connecting…" : "Disconnect"}
-        </button>
-      {/if}
-      <span class="status-text">{$status}</span>
-    </div>
-    {#if $errorMessage}
-      <div class="error-box">{$errorMessage}</div>
-    {/if}
-  {/if}
-
   <div class="stage-card">
     {#if !$stageData.connected}
       <div class="placeholder">
@@ -155,101 +106,6 @@
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-  }
-
-  .controls-toggle {
-    position: absolute;
-    top: 0.75rem;
-    right: 0.75rem;
-    z-index: 10;
-    background: rgba(0, 0, 0, 0.5);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 50%;
-    width: 28px;
-    height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-  }
-
-  .dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #6c757d;
-  }
-
-  .dot.live {
-    background: #2ecc71;
-    box-shadow: 0 0 6px #2ecc71;
-  }
-
-  .controls {
-    position: relative;
-    z-index: 5;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    background: rgba(0, 0, 0, 0.6);
-    border-radius: 6px;
-    padding: 0.5rem;
-    margin-bottom: 0.75rem;
-    align-self: flex-end;
-  }
-
-  .conn-input {
-    background: #252526;
-    border: 1px solid #3e3e42;
-    border-radius: 4px;
-    color: #e0e0e0;
-    padding: 0.4rem 0.6rem;
-    font-size: 0.85rem;
-    width: 120px;
-  }
-
-  .conn-input.port {
-    width: 60px;
-  }
-
-  .colon {
-    color: #858585;
-  }
-
-  .button {
-    padding: 0.4rem 1rem;
-    border: none;
-    border-radius: 4px;
-    font-size: 0.85rem;
-    font-weight: 500;
-    cursor: pointer;
-    color: white;
-  }
-
-  .connect-button {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  }
-
-  .disconnect-button {
-    background: #6c757d;
-  }
-
-  .status-text {
-    font-size: 0.8rem;
-    color: #aaa;
-    text-transform: capitalize;
-  }
-
-  .error-box {
-    background-color: rgba(58, 31, 31, 0.9);
-    border: 1px solid #5a2f2f;
-    border-radius: 4px;
-    padding: 0.6rem 0.9rem;
-    color: #ff8a8a;
-    font-size: 0.8rem;
-    margin-bottom: 0.75rem;
-    align-self: flex-end;
-    max-width: 360px;
   }
 
   .stage-card {

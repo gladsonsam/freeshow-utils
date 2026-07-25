@@ -26,8 +26,10 @@
 <svelte:window onkeydown={open ? onKeydown : undefined} />
 
 {#if open}
-  <div class="scrim" role="presentation" onclick={() => onClose?.()}>
-    <div class="modal" style="width: {width}" role="dialog" aria-label={title} onclick={(e) => e.stopPropagation()}>
+  <div class="scrim">
+    <!-- a real button so clicking outside to dismiss is keyboard-reachable too -->
+    <button type="button" class="scrim-close" aria-label="Close" onclick={() => onClose?.()}></button>
+    <div class="modal" style="width: {width}" role="dialog" aria-label={title}>
       <header class="modal-head">
         <h2 class="modal-title">{title}</h2>
         <IconButton title="Close" onclick={() => onClose?.()}>✕</IconButton>
@@ -52,7 +54,16 @@
     padding: var(--space-5);
   }
 
+  .scrim-close {
+    position: absolute;
+    inset: 0;
+    background: transparent;
+    border: none;
+    cursor: default;
+  }
+
   .modal {
+    position: relative;
     max-width: 100%;
     max-height: 100%;
     display: flex;
