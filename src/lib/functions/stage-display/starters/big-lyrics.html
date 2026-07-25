@@ -1,0 +1,120 @@
+<style>
+  #stage {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    gap: 2vh;
+    padding: 4vh 5vw;
+    background: #05060a;
+  }
+
+  #group {
+    font-size: 2.2vh;
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: #7f8398;
+  }
+
+  #group span {
+    display: inline-block;
+    padding: 0.6vh 1.6vh;
+    border-radius: 999px;
+    color: #fff;
+  }
+
+  #lyrics {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1.2vh;
+    min-height: 0;
+    overflow: hidden;
+    text-align: center;
+    font-size: 8vh;
+    font-weight: 800;
+    line-height: 1.15;
+    text-wrap: balance;
+  }
+
+  #foot {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 2vh;
+    font-size: 2.4vh;
+    color: #7f8398;
+  }
+
+  #next {
+    font-weight: 600;
+    color: #b9bdd0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  #clock {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  #idle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    font-size: 3vh;
+    color: #454a5e;
+  }
+</style>
+
+<div id="stage">
+  <div id="group"></div>
+  <div id="lyrics"><div id="idle">Waiting for FreeShow…</div></div>
+  <div id="foot">
+    <div id="next"></div>
+    <div id="clock"></div>
+  </div>
+</div>
+
+<script>
+  // The current slide only, as large as it will go. No chords, no next slide -
+  // a good starting point for a vocalist-facing screen.
+  window.onFreeShowUpdate = function (data) {
+    var group = document.getElementById("group");
+    var lyrics = document.getElementById("lyrics");
+
+    document.getElementById("clock").textContent = data.clock;
+    document.getElementById("next").textContent = data.nextItemName
+      ? "Next · " + data.nextItemName
+      : "";
+
+    group.textContent = "";
+    lyrics.textContent = "";
+
+    if (!data.current) {
+      var idle = document.createElement("div");
+      idle.id = "idle";
+      idle.textContent = data.connected ? "" : "Waiting for FreeShow…";
+      lyrics.appendChild(idle);
+      return;
+    }
+
+    if (data.current.group) {
+      var pill = document.createElement("span");
+      pill.textContent = data.current.group;
+      pill.style.background = data.current.color || "#2f3346";
+      group.appendChild(pill);
+    }
+
+    data.current.lines.forEach(function (line) {
+      var row = document.createElement("div");
+      row.textContent = line.text;
+      row.style.color = line.color;
+      lyrics.appendChild(row);
+    });
+  };
+</script>

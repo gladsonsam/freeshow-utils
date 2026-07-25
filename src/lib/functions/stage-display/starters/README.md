@@ -1,0 +1,69 @@
+# Writing a stage template
+
+A template is a plain snippet of HTML, CSS and JavaScript — the same idea as a browser source in
+OBS or vMix. It runs in a sandboxed iframe with no network access, and FreeShow Utils feeds it live
+data. Nothing else is injected: no framework, no build step, no bundler.
+
+Write it as a **fragment**, not a full document — `<style>`, markup and `<script>`, with no
+`<html>`, `<head>` or `<body>` tags of your own.
+
+## Getting data
+
+Two equivalent ways, use whichever suits:
+
+```html
+<script>
+  // pushed on every change
+  window.onFreeShowUpdate = function (data) {
+    document.body.textContent = data.current ? data.current.lines[0].text : "";
+  };
+
+  // or pulled whenever you like
+  setInterval(function () {
+    console.log(window.freeShowData);
+  }, 1000);
+</script>
+```
+
+## The data
+
+```js
+{
+  connected: boolean,      // is FreeShow reachable right now
+  current: SlideView|null, // the slide currently on screen
+  next: SlideView|null,    // the slide after it, in the same show
+  showName: string,        // the show currently playing
+  nextItemName: string,    // next item queued in the project (song, video, …)
+  background: string,      // current output background, or ""
+  clock: string,           // pre-formatted local time, e.g. "7:04 PM"
+  timestamp: number        // ms epoch, if you'd rather format your own
+}
+
+SlideView = {
+  group: string,           // "Verse 1", "Chorus", …
+  color: string,           // the group's accent colour, e.g. "#5825f5"
+  lines: StageLine[]
+}
+
+StageLine = {
+  text: string,            // the whole line as one string
+  color: string,           // its dominant colour
+  chords: [{ label: string, charIndex: number }],
+  spans: [{ text: string, color: string }]   // FreeShow's inline colour runs
+}
+```
+
+`chord.charIndex` indexes into `line.text`. An index at or past `text.length` means the chord sits
+past the end of the line — see `lyrics-chords.html` for one way to place both cases.
+
+## Sizing
+
+Output windows are opened at whatever size the operator drags them to, so size everything in `vh`
+/ `vw` / `%` rather than `px`, and the template will scale to any screen.
+
+## Starters
+
+- **Lyrics & Chords** — two-slide view with chords positioned over the lyrics, group tabs, and a
+  show/clock/next footer.
+- **Big Lyrics** — the current slide only, as large as it fits.
+- **Data Inspector** — dumps the live data as JSON. Useful while writing your own template.

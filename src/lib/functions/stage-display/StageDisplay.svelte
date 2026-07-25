@@ -1,269 +1,275 @@
 <script lang="ts">
-  import { freeshowClient } from "$lib/core/freeshowClient";
-  import { stageData } from "$lib/core/stageState";
-  import type { StageLine, SlideView } from "$lib/core/types";
+  import { onMount } from "svelte";
+  import { open, save } from "@tauri-apps/plugin-dialog";
+  import { openPath } from "@tauri-apps/plugin-opener";
+  import Button from "$lib/ui/Button.svelte";
+  import Modal from "$lib/ui/Modal.svelte";
+  import TemplateEditor from "./TemplateEditor.svelte";
+  import { openOutputWindow } from "./outputWindow";
+  import {
+    deleteTemplate,
+    exportTemplateFile,
+    listTemplates,
+    newTemplate,
+    newTemplateId,
+    readTemplate,
+    readTemplateFile,
+    seedStarters,
+    templatesFolder,
+    writeTemplate,
+    type Template,
+    type TemplateMeta,
+  } from "./templates";
 
-  const status = freeshowClient.status;
+  let templates = $state<TemplateMeta[]>([]);
+  let editing = $state<Template | null>(null);
+  let pendingDelete = $state<TemplateMeta | null>(null);
+  let errorMessage = $state("");
+  let loading = $state(true);
 
-  // splits e.g. "C#m7" -> base "C#m", superscript "7"; "B/D#" -> base "B/D#", no superscript
-  function formatChord(key: string): { base: string; sup: string; suffix: string } {
-    const slashIndex = key.indexOf("/");
-    const main = slashIndex >= 0 ? key.slice(0, slashIndex) : key;
-    const suffix = slashIndex >= 0 ? key.slice(slashIndex) : "";
-    const match = main.match(/^(.*?)(\d+)$/);
-    if (match) return { base: match[1], sup: match[2], suffix };
-    return { base: main, sup: "", suffix };
+  onMount(async () => {
+    try {
+      await seedStarters();
+    } catch (error) {
+      errorMessage = `Could not install the starter templates: ${error}`;
+    }
+    await refresh();
+    loading = false;
+  });
+
+  async function refresh() {
+    try {
+      templates = await listTemplates();
+    } catch (error) {
+      errorMessage = `Could not read the templates folder: ${error}`;
+    }
   }
 
-  // per-character breakdown so an invisible mirror row can align chord spans above
-  // the exact character FreeShow recorded them at
-  function buildChordLine(line: StageLine) {
-    const chars = [...line.text];
-    const inlineChordAt = new Map<number, string>();
-    const endChords: string[] = [];
-    line.chords.forEach((chord) => {
-      if (chord.charIndex < chars.length) inlineChordAt.set(chord.charIndex, chord.label);
-      else endChords.push(chord.label);
+  /** wrap an action so a failure lands in the banner instead of the console */
+  async function guard(action: () => Promise<void>) {
+    try {
+      errorMessage = "";
+      await action();
+    } catch (error) {
+      errorMessage = String(error);
+    }
+  }
+
+  const create = () =>
+    guard(async () => {
+      const template = newTemplate();
+      await writeTemplate(template);
+      await refresh();
+      editing = template;
     });
-    return { chars, inlineChordAt, endChords };
+
+  const edit = (meta: TemplateMeta) =>
+    guard(async () => {
+      editing = await readTemplate(meta.id);
+    });
+
+  const duplicate = (meta: TemplateMeta) =>
+    guard(async () => {
+      const source = await readTemplate(meta.id);
+      await writeTemplate({
+        id: newTemplateId(),
+        name: `${source.name} copy`,
+        created: new Date().toISOString(),
+        html: source.html,
+      });
+      await refresh();
+    });
+
+  const remove = (meta: TemplateMeta) =>
+    guard(async () => {
+      await deleteTemplate(meta.id);
+      pendingDelete = null;
+      await refresh();
+    });
+
+  const importTemplate = () =>
+    guard(async () => {
+      const picked = await open({
+        multiple: false,
+        filters: [{ name: "HTML template", extensions: ["html", "htm"] }],
+      });
+      const path = Array.isArray(picked) ? picked[0] : picked;
+      if (typeof path !== "string" || !path) return;
+
+      const imported = await readTemplateFile(path);
+      await writeTemplate({
+        id: newTemplateId(),
+        name: imported.name,
+        created: new Date().toISOString(),
+        html: imported.html,
+      });
+      await refresh();
+    });
+
+  const exportTemplate = (meta: TemplateMeta) =>
+    guard(async () => {
+      const path = await save({
+        defaultPath: `${meta.name.replace(/[^\w \-]/g, "")}.html`,
+        filters: [{ name: "HTML template", extensions: ["html"] }],
+      });
+      if (!path) return;
+      await exportTemplateFile(meta.id, path);
+    });
+
+  const openFolder = () => guard(async () => openPath(await templatesFolder()));
+
+  const activate = (meta: TemplateMeta) => guard(() => openOutputWindow(meta));
+
+  const saveEdits = (template: Template) =>
+    guard(async () => {
+      await writeTemplate(template);
+      editing = template;
+      await refresh();
+    });
+
+  function formatCreated(created: string): string {
+    if (!created) return "";
+    const date = new Date(created);
+    return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString();
   }
 </script>
 
-{#snippet slideBlock(slide: SlideView)}
-  <div class="block">
-    <div class="group-tab" style={slide.color ? `background:${slide.color}` : ""}>
-      {slide.group}
+{#if editing}
+  <TemplateEditor
+    template={editing}
+    onSave={saveEdits}
+    onBack={() => {
+      editing = null;
+      refresh();
+    }}
+  />
+{:else}
+  <div class="gallery">
+    <div class="toolbar">
+      <Button variant="primary" onclick={create}>+ New template</Button>
+      <Button onclick={importTemplate}>Import…</Button>
+      <div class="spacer"></div>
+      <Button variant="ghost" onclick={openFolder}>Open templates folder</Button>
     </div>
-    <div class="lyrics">
-      {#each slide.lines as line}
-        {@const built = buildChordLine(line)}
-        <div class="lyric-line">
-          {#if built.inlineChordAt.size || built.endChords.length}
-            <div class="chord-row">
-              {#each built.chars as char, i}
-                {#if built.inlineChordAt.has(i)}
-                  {@const chord = formatChord(built.inlineChordAt.get(i)!)}
-                  <span class="chord"
-                    >{chord.base}{#if chord.sup}<sup>{chord.sup}</sup>{/if}{chord.suffix}</span
-                  >
-                {/if}
-                <span class="invisible">{char}</span>
-              {/each}
-              {#each built.endChords as label, i}
-                {@const chord = formatChord(label)}
-                <span class="chord end" style="transform: translateX(calc({1.4 * (i + 1)}em - 50%));"
-                  >{chord.base}{#if chord.sup}<sup>{chord.sup}</sup>{/if}{chord.suffix}</span
-                >
-              {/each}
-            </div>
-          {/if}
-          <div class="text-row">
-            {#each line.spans as span}
-              <span style="color:{span.color}">{span.text}</span>
-            {/each}
-          </div>
-        </div>
-      {/each}
-    </div>
-  </div>
-{/snippet}
 
-<div
-  class="stage-tool"
-  style={$stageData.background ? `background-image: url(${$stageData.background})` : ""}
->
-  <div class="stage-card">
-    {#if !$stageData.connected}
-      <div class="placeholder">
-        {$status === "no-hook" ? "Waiting for a Stage Show routing pointer…" : "Not connected."}
-      </div>
+    {#if errorMessage}
+      <div class="error-box">{errorMessage}</div>
+    {/if}
+
+    {#if loading}
+      <p class="empty">Loading templates…</p>
+    {:else if !templates.length}
+      <p class="empty">No templates yet — create one, or import a .html file.</p>
     {:else}
-      <div class="blocks">
-        {#if $stageData.current}{@render slideBlock($stageData.current)}{/if}
-        {#if $stageData.next}{@render slideBlock($stageData.next)}{/if}
-      </div>
-
-      <div class="bottom-bar">
-        <div class="pill current-pill">{$stageData.showName || "—"}</div>
-        <div class="tab-label">Current</div>
-        <div class="clock">{$stageData.clock}</div>
-        <div class="tab-label">Next</div>
-        <div class="pill next-pill">{$stageData.nextItemName || "—"}</div>
+      <div class="grid">
+        {#each templates as template (template.id)}
+          <article class="card">
+            <div class="card-body">
+              <h3 class="card-name">{template.name}</h3>
+              {#if formatCreated(template.created)}
+                <p class="card-meta">Created {formatCreated(template.created)}</p>
+              {/if}
+            </div>
+            <div class="card-actions">
+              <Button variant="primary" size="sm" onclick={() => activate(template)}>Activate</Button>
+              <Button size="sm" onclick={() => edit(template)}>Edit</Button>
+              <Button variant="ghost" size="sm" onclick={() => duplicate(template)}>Duplicate</Button>
+              <Button variant="ghost" size="sm" onclick={() => exportTemplate(template)}>Export</Button>
+              <Button variant="ghost" size="sm" onclick={() => (pendingDelete = template)}>Delete</Button>
+            </div>
+          </article>
+        {/each}
       </div>
     {/if}
   </div>
-</div>
+{/if}
+
+<Modal
+  open={!!pendingDelete}
+  title="Delete template"
+  onClose={() => (pendingDelete = null)}
+  width="380px"
+>
+  <p class="confirm">Delete “{pendingDelete?.name}”? This removes the file from disk.</p>
+  {#snippet footer()}
+    <Button variant="danger" onclick={() => pendingDelete && remove(pendingDelete)}>Delete</Button>
+    <Button variant="ghost" onclick={() => (pendingDelete = null)}>Cancel</Button>
+  {/snippet}
+</Modal>
 
 <style>
-  .stage-tool {
-    position: relative;
-    height: 100%;
-    width: 100%;
-    background-color: #000;
-    background-size: cover;
-    background-position: center;
-    padding: 1.5rem;
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .stage-card {
+  .gallery {
     flex: 1;
     display: flex;
     flex-direction: column;
-    background: rgba(0, 0, 0, 0.88);
-    border-radius: 12px;
-    overflow: hidden;
+    gap: var(--space-4);
     min-height: 0;
+    padding: var(--space-5);
+    overflow-y: auto;
   }
 
-  .placeholder {
-    flex: 1;
+  .toolbar {
     display: flex;
     align-items: center;
-    justify-content: center;
-    color: #777;
-    font-size: 1.1rem;
+    gap: var(--space-2);
   }
 
-  .blocks {
+  .spacer {
     flex: 1;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: var(--space-3);
+  }
+
+  .card {
     display: flex;
     flex-direction: column;
-    min-height: 0;
-    overflow: hidden;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding: var(--space-4);
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
   }
 
-  .block {
-    flex: 1;
+  .card-name {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    word-break: break-word;
+  }
+
+  .card-meta {
+    margin: var(--space-1) 0 0;
+    font-size: 0.78rem;
+    color: var(--text-faint);
+  }
+
+  .card-actions {
     display: flex;
-    align-items: stretch;
-    min-height: 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    flex-wrap: wrap;
+    gap: var(--space-1);
   }
 
-  .block:last-child {
-    border-bottom: none;
+  .empty {
+    margin: 0;
+    color: var(--text-faint);
   }
 
-  .group-tab {
-    flex-shrink: 0;
-    width: 3.5rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #444;
-    color: #fff;
-    font-weight: 700;
-    font-size: 1.1rem;
-    letter-spacing: 0.02em;
-    writing-mode: vertical-rl;
-    text-orientation: mixed;
-    transform: rotate(180deg);
-    text-align: center;
-    padding: 0.75rem 0;
+  .confirm {
+    margin: 0;
+    line-height: 1.5;
   }
 
-  .lyrics {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 1.25rem;
-    padding: 1.25rem 2rem;
-    overflow: hidden;
-  }
-
-  .lyric-line {
-    position: relative;
-  }
-
-  .chord-row {
-    position: relative;
-    height: 1.3em;
-    line-height: 0;
-    white-space: nowrap;
-  }
-
-  .chord-row .invisible {
-    opacity: 0;
-    line-height: 0;
-    font-size: 2.4rem;
-    font-weight: 700;
-  }
-
-  .chord-row .chord {
-    position: absolute;
-    top: 0;
-    line-height: 1;
-    font-weight: 700;
-    font-size: 1.4rem;
-    color: #f5b400;
-    white-space: nowrap;
-  }
-
-  .chord-row .chord sup {
-    font-size: 0.65em;
-    top: -0.5em;
-  }
-
-  .text-row {
-    font-size: 2.4rem;
-    font-weight: 700;
-    line-height: 1.25;
-  }
-
-  .bottom-bar {
-    flex-shrink: 0;
-    display: flex;
-    align-items: stretch;
-    background: #000;
-  }
-
-  .pill {
-    display: flex;
-    align-items: center;
-    padding: 0.6rem 1.25rem;
-    font-size: 1.3rem;
-    font-weight: 700;
-    color: #fff;
-  }
-
-  .current-pill {
-    background: #4caf50;
-  }
-
-  .next-pill {
-    background: #2b8fd6;
-    flex: 1;
-    justify-content: flex-end;
-  }
-
-  .tab-label {
-    flex-shrink: 0;
-    width: 1.8rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #fff;
-    color: #000;
-    font-weight: 700;
-    font-size: 0.75rem;
-    writing-mode: vertical-rl;
-    text-orientation: mixed;
-    transform: rotate(180deg);
-  }
-
-  .clock {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #fff;
-    font-size: 1.6rem;
-    font-weight: 700;
-    font-feature-settings: "tnum" 1;
-    padding: 0.5rem 1rem;
+  .error-box {
+    padding: var(--space-3) var(--space-4);
+    background: var(--danger-soft);
+    border: 1px solid var(--danger);
+    border-radius: var(--radius-sm);
+    color: var(--danger);
+    font-size: 0.85rem;
   }
 </style>

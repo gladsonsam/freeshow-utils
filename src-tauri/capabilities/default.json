@@ -8,6 +8,8 @@
     "opener:default",
     "dialog:allow-open",
     "dialog:allow-save",
+    "opener:allow-open-path",
+    "core:window:allow-set-focus",
     "core:webview:allow-create-webview-window",
     "core:window:allow-close",
     "core:window:allow-set-decorations",
