@@ -5,6 +5,8 @@ export type OutputSettings = {
   displayName: string | null;
   displayIndex: number;
   fullscreen: boolean;
+  /** reopen this template's output on its saved display as soon as the app starts */
+  autoStart: boolean;
 };
 
 /**
@@ -27,7 +29,12 @@ const KEY = "freeshow-utils.stage-output";
 
 // fullscreen by default: an output window is for a stage monitor, and on Wayland
 // it is also the only way the chosen display is honoured at all
-const DEFAULTS: OutputSettings = { displayName: null, displayIndex: 0, fullscreen: true };
+const DEFAULTS: OutputSettings = {
+  displayName: null,
+  displayIndex: 0,
+  fullscreen: true,
+  autoStart: false,
+};
 
 const empty = (): OutputConfig => ({ fallback: { ...DEFAULTS }, byTemplate: {} });
 
@@ -47,9 +54,14 @@ function load(): OutputConfig {
       return { fallback: { ...DEFAULTS, ...parsed }, byTemplate: {} };
     }
 
+    const byTemplate: Record<string, OutputSettings> = {};
+    for (const [id, settings] of Object.entries(parsed.byTemplate ?? {})) {
+      byTemplate[id] = { ...DEFAULTS, ...(settings as Partial<OutputSettings>) };
+    }
+
     return {
       fallback: { ...DEFAULTS, ...(parsed.fallback ?? {}) },
-      byTemplate: parsed.byTemplate ?? {},
+      byTemplate,
     };
   } catch {
     return empty();

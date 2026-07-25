@@ -74,6 +74,7 @@
       await refresh();
       await refreshDisplays();
       await refreshOutputs();
+      await autoStartOutputs();
       loading = false;
     })();
 
@@ -103,6 +104,30 @@
   }
 
   /**
+   * Reopen every template pinned to auto-start, on the display it was left on -
+   * this is what makes "set the output once" mean something across app
+   * restarts rather than just remembering the picker for next time it's clicked.
+   * Runs once, right after launch, before the operator has touched anything.
+   */
+  async function autoStartOutputs() {
+    for (const template of templates) {
+      if (liveOutputs.has(template.id)) continue;
+      const settings = settingsFor($outputConfig, template.id);
+      if (!settings.autoStart) continue;
+      try {
+        placementWarning =
+          (await openOutputWindow(template, {
+            display: displayFor(template.id),
+            fullscreen: settings.fullscreen,
+          })) ?? placementWarning;
+      } catch (error) {
+        errorMessage = `Could not auto-start "${template.name}": ${error}`;
+      }
+    }
+    await refreshOutputs();
+  }
+
+  /**
    * The close event arrives *before* the window is gone, so trust the id it
    * carries instead of re-reading the window list.
    */
@@ -118,6 +143,9 @@
 
   const toggleFullscreen = (templateId: string) =>
     updateSettings(templateId, { fullscreen: !settingsFor($outputConfig, templateId).fullscreen });
+
+  const toggleAutoStart = (templateId: string) =>
+    updateSettings(templateId, { autoStart: !settingsFor($outputConfig, templateId).autoStart });
 
   async function refresh() {
     try {
@@ -353,6 +381,16 @@
                 onclick={() => toggleFullscreen(template.id)}
               >
                 <Icon name="fullscreen" />
+              </IconButton>
+
+              <IconButton
+                title={settings.autoStart
+                  ? "Opens automatically when the app starts — click to stop"
+                  : "Open this display automatically when the app starts"}
+                active={settings.autoStart}
+                onclick={() => toggleAutoStart(template.id)}
+              >
+                <Icon name="pin" />
               </IconButton>
             </div>
 
