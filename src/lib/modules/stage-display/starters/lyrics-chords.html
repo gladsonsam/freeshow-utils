@@ -87,6 +87,23 @@
     overflow: hidden;
   }
 
+  /* a slide that is a picture rather than words - a PDF page, an imported deck.
+     It fills its block instead of being scaled by autofit, which only knows how
+     to measure text */
+  .lyrics.media {
+    justify-content: center;
+    padding: 1.2vh;
+  }
+
+  /* fill the block, not just fit inside it: FreeShow sends a downscaled copy, so
+     max-width/max-height would leave it sitting at its own small natural size in
+     the middle of an empty box. contain still keeps the page's proportions */
+  .lyrics.media img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
   /* shrink-wraps the lines so autofit can measure their real size, then scales
      the whole group uniformly - uniform scale is what keeps chords sitting over
      the right characters */
@@ -256,16 +273,56 @@
     return html + "</div></div>";
   }
 
+  // FreeShow inlines any picture it can reach, so a `data:` source is already
+  // proven and can be drawn at once. Anything still pointing at a URL is media
+  // it only had a link to - and those links expire. Never lay out a block for
+  // one of those on the strength of hope: show it only once it has actually
+  // loaded, off-screen and out of the way. Rendering optimistically and undoing
+  // it on error is what made the slide resize on every change.
+  var remoteImages = {};
+
+  function imageUsable(src) {
+    if (!src) return false;
+    if (src.slice(0, 5) === "data:") return true;
+
+    if (remoteImages[src] === undefined) {
+      remoteImages[src] = false;
+      var probe = new Image();
+      probe.onload = function () {
+        remoteImages[src] = true;
+        render(window.freeShowData);
+      };
+      probe.src = src;
+    }
+    return remoteImages[src];
+  }
+
+  // Words if the slide has any, otherwise its picture. A slide can have both -
+  // lyrics over a still - and then the words win and the still stays behind.
+  function slideImage(slide) {
+    if (!slide || slide.lines.length) return "";
+    if (!slide.media || slide.media.type !== "image") return "";
+    return imageUsable(slide.media.src) ? slide.media.src : "";
+  }
+
   function slideHtml(slide) {
     var groupStyle = slide.color ? ' style="background:' + esc(slide.color) + '"' : "";
+    var image = slideImage(slide);
+
+    var body = image
+      ? '<div class="lyrics media"><img alt="" src="' + esc(image) + '"></div>'
+      : '<div class="lyrics"><div class="fit">' +
+        slide.lines.map(lineHtml).join("") +
+        "</div></div>";
+
     return (
       '<div class="block"><div class="group"' +
       groupStyle +
       ">" +
       esc(slide.group) +
-      '</div><div class="lyrics"><div class="fit">' +
-      slide.lines.map(lineHtml).join("") +
-      "</div></div></div>"
+      "</div>" +
+      body +
+      "</div>"
     );
   }
 
@@ -275,6 +332,9 @@
     var boxes = document.querySelectorAll(".lyrics");
     for (var i = 0; i < boxes.length; i++) {
       var box = boxes[i];
+      // an image block sizes itself with object-fit; scaling it would fight that
+      if (box.classList.contains("media")) continue;
+
       var fit = box.firstElementChild;
       if (!fit) continue;
 
@@ -299,26 +359,49 @@
   // transform doesn't affect layout, so observing the body can't loop
   if (window.ResizeObserver) new ResizeObserver(autofit).observe(document.body);
 
-  window.onFreeShowUpdate = function (data) {
+  // The clock ticks once a second, so updates arrive far more often than the
+  // slide actually changes. Rebuilding the blocks every time would throw away
+  // and re-decode the slide image once a second; only touch the DOM when the
+  // markup genuinely differs.
+  var lastBlocksHtml = null;
+
+  function render(data) {
+    if (!data) return;
+
     var stage = document.getElementById("stage");
     var placeholder = document.getElementById("placeholder");
     var blocks = document.getElementById("blocks");
     var bar = document.getElementById("bar");
 
-    stage.style.backgroundImage = data.background ? 'url("' + data.background + '")' : "";
+    // When the slide *is* the picture we show it in the block instead, so
+    // painting it behind the card as well would just draw it twice.
+    var showsOwnImage = !!slideImage(data.current);
+    stage.style.backgroundImage =
+      data.background && !showsOwnImage ? 'url("' + data.background + '")' : "";
 
     placeholder.hidden = data.connected;
     blocks.hidden = !data.connected;
     bar.hidden = !data.connected;
     if (!data.connected) return;
 
-    var slides = [data.current, data.next].filter(Boolean);
-    blocks.innerHTML = slides.map(slideHtml).join("");
+    // The next block is dropped only when it is a picture we cannot show - the
+    // next page of an online deck whose link has expired. That block would be a
+    // black void taking half the screen off the current slide. A wordless *text*
+    // slide still gets its block, as it always has.
+    var slides = [data.current];
+    if (data.next && !(data.next.media && !slideImage(data.next))) slides.push(data.next);
+
+    var html = slides.filter(Boolean).map(slideHtml).join("");
+    if (html !== lastBlocksHtml) {
+      lastBlocksHtml = html;
+      blocks.innerHTML = html;
+      autofit();
+    }
 
     document.getElementById("showName").textContent = data.showName || "—";
     document.getElementById("nextName").textContent = data.nextItemName || "—";
     document.getElementById("clock").textContent = data.clock;
+  }
 
-    autofit();
-  };
+  window.onFreeShowUpdate = render;
 </script>

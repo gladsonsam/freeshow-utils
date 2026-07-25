@@ -39,6 +39,20 @@
     overflow: hidden;
   }
 
+  /* a slide that is a picture rather than words - a PDF page, an imported deck.
+     Fill the box: FreeShow sends a downscaled copy, so max-width/max-height would
+     strand it at its own small natural size. contain, not cover, because a page
+     you can only see part of is worse than one that leaves a margin */
+  #media {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  [hidden] {
+    display: none !important;
+  }
+
   #fit {
     display: inline-flex;
     flex-direction: column;
@@ -86,7 +100,10 @@
 
 <div id="stage">
   <div id="group"></div>
-  <div id="lyrics"><div id="fit"><div id="idle">Waiting for FreeShow…</div></div></div>
+  <div id="lyrics">
+    <div id="fit"><div id="idle">Waiting for FreeShow…</div></div>
+      <img id="media" alt="" hidden />
+  </div>
   <div id="foot">
     <div id="next"></div>
     <div id="clock"></div>
@@ -111,9 +128,40 @@
 
   if (window.ResizeObserver) new ResizeObserver(autofit).observe(document.body);
 
+  // FreeShow inlines any picture it can reach, so a `data:` source is already
+  // proven and can be drawn at once. Anything still pointing at a URL is media
+  // it only had a link to - and those links expire - so it gets loaded
+  // off-screen first and only shown once it really arrived.
+  var remoteImages = {};
+
+  function imageUsable(src) {
+    if (!src) return false;
+    if (src.slice(0, 5) === "data:") return true;
+
+    if (remoteImages[src] === undefined) {
+      remoteImages[src] = false;
+      var probe = new Image();
+      probe.onload = function () {
+        remoteImages[src] = true;
+        if (window.freeShowData) window.onFreeShowUpdate(window.freeShowData);
+      };
+      probe.src = src;
+    }
+    return remoteImages[src];
+  }
+
+  // Words if the slide has any, otherwise its picture. A slide can have both -
+  // lyrics over a still - and then the words are what this screen is for.
+  function slideImage(slide) {
+    if (!slide || slide.lines.length) return "";
+    if (!slide.media || slide.media.type !== "image") return "";
+    return imageUsable(slide.media.src) ? slide.media.src : "";
+  }
+
   window.onFreeShowUpdate = function (data) {
     var group = document.getElementById("group");
     var lyrics = document.getElementById("fit");
+    var media = document.getElementById("media");
 
     document.getElementById("clock").textContent = data.clock;
     document.getElementById("next").textContent = data.nextItemName
@@ -122,6 +170,13 @@
 
     group.textContent = "";
     lyrics.textContent = "";
+
+    var image = slideImage(data.current);
+    media.hidden = !image;
+    lyrics.hidden = !!image;
+    // dropping the src as well stops the old page lingering behind the new one
+    if (!image) media.removeAttribute("src");
+    else if (media.getAttribute("src") !== image) media.setAttribute("src", image);
 
     if (!data.current) {
       var idle = document.createElement("div");

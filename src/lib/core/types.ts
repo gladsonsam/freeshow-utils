@@ -16,11 +16,26 @@ export type ShowSlide = {
   children?: string[];
 };
 
+/** a media file the show references, keyed by id in `Show.media` */
+export type MediaRef = { path?: string; name?: string; type?: string };
+
+/**
+ * One entry in a layout. The media shown *with* a slide hangs off the layout,
+ * not the slide - and slides in a group keep theirs under `children`, keyed by
+ * slide id. Both are ids into `Show.media`.
+ */
+export type LayoutSlide = {
+  id: string;
+  background?: string;
+  children?: Record<string, { background?: string }>;
+};
+
 export type Show = {
   name?: string;
   settings?: { activeLayout?: string };
-  layouts?: Record<string, { slides?: { id: string }[] }>;
+  layouts?: Record<string, { slides?: LayoutSlide[] }>;
   slides?: Record<string, ShowSlide>;
+  media?: Record<string, MediaRef>;
 };
 
 export type ProjectItem = { id: string; index: number; name?: string; type?: string };
@@ -58,12 +73,37 @@ export interface StageLine {
   spans: { text: string; color: string }[];
 }
 
+/**
+ * The picture a slide *is*, rather than the backdrop it sits on.
+ *
+ * PDF and slide-deck imports come through as slides with no text and one image
+ * each, so a template that only draws `lines` renders nothing for them. Ordinary
+ * lyric slides have no media of their own even when a background loop is
+ * playing behind them - that loop is `StageData.background`, never this.
+ */
+export interface SlideMedia {
+  /**
+   * ready to drop straight into `img.src`: a data URI for local files, the
+   * original URL for online media. Empty when FreeShow can't inline it - it only
+   * sends images, so a slide backed by a video has a `path` but no `src`.
+   */
+  src: string;
+  /** "image", "video" or "" if it can't be told from the file */
+  type: string;
+  /** the original file path or URL, e.g. for a caption or debugging */
+  path: string;
+  /** FreeShow's name for it, e.g. "Slide 12" */
+  name: string;
+}
+
 export interface SlideView {
   /** slide group name, e.g. "Verse 1" */
   group: string;
   /** group accent colour, e.g. "#5825f5" */
   color: string;
   lines: StageLine[];
+  /** this slide's own image, or null - see SlideMedia */
+  media: SlideMedia | null;
 }
 
 export interface StageData {
@@ -74,7 +114,12 @@ export interface StageData {
   showName: string;
   /** name of the next item queued in the project (song, section, video, …) */
   nextItemName: string;
-  /** data URI or absolute path of the current output background, or "" */
+  /**
+   * the current output background - whatever is behind the slide, whether that
+   * is a worship loop or the slide's own image. A data URI (FreeShow downscales
+   * it first), an absolute path, or "". For "is this picture the slide itself?"
+   * use `current.media` instead.
+   */
   background: string;
   /** pre-formatted local time, e.g. "7:04 PM" */
   clock: string;

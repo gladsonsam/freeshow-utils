@@ -39,7 +39,16 @@
 <script>
   // Everything a template can ever see, printed raw. Handy as a reference while
   // writing your own template, and as a check that data is actually arriving.
+  //
+  // Images arrive inline as data URIs hundreds of kilobytes long, which would
+  // bury everything else - so those are shortened. Your template gets the whole
+  // string; only this printout is trimmed.
+  function readable(key, value) {
+    if (typeof value !== "string" || value.length <= 120) return value;
+    return value.slice(0, 60) + "… [" + value.length + " chars]";
+  }
+
   window.onFreeShowUpdate = function (data) {
-    document.getElementById("data").textContent = JSON.stringify(data, null, 2);
+    document.getElementById("data").textContent = JSON.stringify(data, readable, 2);
   };
 </script>

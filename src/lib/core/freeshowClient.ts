@@ -30,6 +30,8 @@ export class FreeShowClient {
   readonly out: Writable<Out | null> = writable(null);
   readonly shows: Writable<Record<string, Show>> = writable({});
   readonly background: Writable<string> = writable("");
+  /** same, for the slide one step ahead - FreeShow sends it alongside */
+  readonly nextBackground: Writable<string> = writable("");
   readonly projects: Writable<Record<string, Project> | null> = writable(null);
 
   private stageSocket: Socket | null = null;
@@ -91,8 +93,12 @@ export class FreeShowClient {
             this.shows.update((cache) => ({ ...cache, [msg.data.id]: msg.data.show }));
           }
           break;
+        // Carries more than its name suggests: the current background *and* the
+        // two after it, each already downscaled to a data URI. Non-images come
+        // back empty, so this never lands a whole video in memory.
         case "BACKGROUND":
           this.background.set(msg.data?.path || "");
+          this.nextBackground.set(msg.data?.next?.path || "");
           break;
         case "ERROR":
           this.errorMessage.set(`FreeShow error: ${JSON.stringify(msg.data)}`);
@@ -175,6 +181,7 @@ export class FreeShowClient {
     this.out.set(null);
     this.shows.set({});
     this.background.set("");
+    this.nextBackground.set("");
     this.projects.set(null);
   }
 

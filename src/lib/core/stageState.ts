@@ -8,6 +8,7 @@ import type {
   Show,
   ShowLine,
   ShowSlide,
+  SlideMedia,
   SlideView,
   StageData,
   StageLine,
@@ -18,7 +19,12 @@ import type {
 // about (and tested) without a live connection.
 
 /** a slide in playback order, plus the group parent it hangs off (if any) */
-export type SlideRef = { id: string; parentId: string | null };
+export type SlideRef = {
+  id: string;
+  parentId: string | null;
+  /** id into `show.media` of the picture shown with this slide, if any */
+  mediaId: string | null;
+};
 
 /**
  * Flatten a layout into the order slides actually play in.
@@ -28,6 +34,10 @@ export type SlideRef = { id: string; parentId: string | null };
  * after it. FreeShow's `out.slide.index` counts positions in this expanded list,
  * not in the stored layout - so indexing the raw layout array silently reads the
  * wrong slide as soon as any group has more than one.
+ *
+ * Per-slide media hangs off the layout too, and each child carries its own under
+ * `entry.children[childId]` - which is how a PDF import, stored as one parent
+ * plus a child per page, gives every page a different picture.
  */
 export function layoutRefs(show: Show, layoutId?: string): SlideRef[] {
   const entries = layoutId ? show.layouts?.[layoutId]?.slides : undefined;
@@ -35,16 +45,26 @@ export function layoutRefs(show: Show, layoutId?: string): SlideRef[] {
 
   const refs: SlideRef[] = [];
   for (const entry of entries) {
-    refs.push({ id: entry.id, parentId: null });
+    refs.push({ id: entry.id, parentId: null, mediaId: entry.background || null });
     for (const childId of show.slides?.[entry.id]?.children || []) {
-      refs.push({ id: childId, parentId: entry.id });
+      refs.push({
+        id: childId,
+        parentId: entry.id,
+        mediaId: entry.children?.[childId]?.background || null,
+      });
     }
   }
   return refs;
 }
 
 /** a resolved slide together with its group parent, so children can inherit */
-export type ResolvedSlide = { slide: ShowSlide; parent: ShowSlide | null };
+export type ResolvedSlide = {
+  slide: ShowSlide;
+  parent: ShowSlide | null;
+  /** the show it came from, so its `media` map can be looked up */
+  show: Show;
+  mediaId: string | null;
+};
 
 /** resolve out.slide (showId + layoutId + index) -> the real slide content */
 export function resolveSlide(
@@ -65,7 +85,63 @@ export function resolveSlide(
   const slide = show.slides?.[ref.id];
   if (!slide) return null;
 
-  return { slide, parent: ref.parentId ? (show.slides?.[ref.parentId] ?? null) : null };
+  return {
+    slide,
+    parent: ref.parentId ? (show.slides?.[ref.parentId] ?? null) : null,
+    show,
+    mediaId: ref.mediaId,
+  };
+}
+
+/** file extensions FreeShow treats as still images */
+const IMAGE_EXTENSIONS = [
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "bmp",
+  "avif",
+  "tif",
+  "tiff",
+  "svg",
+  "heic",
+];
+
+const VIDEO_EXTENSIONS = ["mp4", "mov", "m4v", "webm", "mkv", "avi", "wmv", "mpg", "mpeg"];
+
+/**
+ * PDF imports record no `type` on their media, so fall back to the extension.
+ * Query strings have to be stripped first - online media arrives as a signed URL
+ * with the extension buried before a `?`.
+ */
+export function mediaType(path: string, declared?: string): string {
+  if (declared) return declared;
+
+  const withoutQuery = path.split("?")[0] || "";
+  const extension = withoutQuery.slice(withoutQuery.lastIndexOf(".") + 1).toLowerCase();
+
+  if (IMAGE_EXTENSIONS.includes(extension)) return "image";
+  if (VIDEO_EXTENSIONS.includes(extension)) return "video";
+  return "";
+}
+
+/**
+ * Pair a slide's media id with the picture FreeShow has already prepared for it.
+ *
+ * `src` is passed in rather than read from the show because the show only stores
+ * the original path - which for online media is a signed URL that has usually
+ * expired by the time anyone presents it. FreeShow sends a usable, downscaled
+ * copy on the BACKGROUND channel instead; that is what lands here.
+ */
+export function toSlideMedia(resolved: ResolvedSlide | null, src: string): SlideMedia | null {
+  if (!resolved?.mediaId) return null;
+
+  const ref = resolved.show.media?.[resolved.mediaId];
+  if (!ref) return null;
+
+  const path = ref.path || "";
+  return { src, type: mediaType(path, ref.type), path, name: ref.name || "" };
 }
 
 export function slideTextLines(slide: ShowSlide | null): ShowLine[] {
@@ -110,13 +186,14 @@ export function toStageLine(line: ShowLine): StageLine {
  * so they inherit the parent's - otherwise a continuation slide shows a blank
  * group tab instead of "Chorus".
  */
-export function toSlideView(resolved: ResolvedSlide | null): SlideView | null {
+export function toSlideView(resolved: ResolvedSlide | null, mediaSrc = ""): SlideView | null {
   if (!resolved) return null;
   const { slide, parent } = resolved;
   return {
     group: slide.group || parent?.group || "",
     color: slide.color || parent?.color || "",
     lines: slideTextLines(slide).map(toStageLine),
+    media: toSlideMedia(resolved, mediaSrc),
   };
 }
 
@@ -175,8 +252,17 @@ export function createStageState(client: FreeShowClient): Readable<StageData> {
   const showNames = writable<Record<string, string>>({});
 
   return derived(
-    [client.status, client.out, client.shows, client.background, client.projects, showNames, tick],
-    ([status, out, shows, background, projects, names, timestamp]) => {
+    [
+      client.status,
+      client.out,
+      client.shows,
+      client.background,
+      client.nextBackground,
+      client.projects,
+      showNames,
+      tick,
+    ],
+    ([status, out, shows, background, nextBackground, projects, names, timestamp]) => {
       const nextItem = findNextProjectItem(out, projects);
 
       if (nextItem && !nextItem.name && !nextItem.type && !names[nextItem.id]) {
@@ -189,8 +275,11 @@ export function createStageState(client: FreeShowClient): Readable<StageData> {
 
       return {
         connected: status === "connected",
-        current: toSlideView(resolveSlide(out, shows, 0)),
-        next: toSlideView(resolveSlide(out, shows, 1)),
+        // `background` is the live output, which for a slide that owns media is
+        // that media - so it doubles as the current slide's picture. `next` only
+        // ever comes from the next slide's own layout entry.
+        current: toSlideView(resolveSlide(out, shows, 0), background),
+        next: toSlideView(resolveSlide(out, shows, 1), nextBackground),
         showName: (showId && shows[showId]?.name) || "",
         nextItemName: nextItem ? nextItem.name || names[nextItem.id] || "" : "",
         background,
