@@ -15,9 +15,8 @@ Some ship with the app:
 | Module | Status |
 | --- | --- |
 | Stage Display | shipped |
-| Text Processor | shipped |
+| Show Processor | shipped — runs Python scripts over pasted text; operating on shows directly is still to come |
 | Show Importer | planned |
-| Show Processor | planned |
 
 But shipping with the app is meant to be an accident of timing, nothing more. **The goal is that
 anyone can write and share a module, and installing one is not a fork of this repo.** Someone

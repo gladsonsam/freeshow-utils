@@ -1,4 +1,4 @@
-//! Text Processor backend: discover and run user-supplied Python scripts.
+//! Show Processor backend: discover and run user-supplied Python scripts.
 
 use std::fs;
 use std::path::Path;

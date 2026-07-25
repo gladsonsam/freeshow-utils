@@ -1,6 +1,6 @@
 import type { Component } from "svelte";
 import StageDisplay from "./stage-display/StageDisplay.svelte";
-import TextProcessor from "./text-processor/TextProcessor.svelte";
+import ShowProcessor from "./show-processor/ShowProcessor.svelte";
 
 export type AppModule = {
   id: string;
@@ -29,11 +29,11 @@ export const appModules: AppModule[] = [
     component: StageDisplay,
   },
   {
-    id: "text-processor",
-    name: "Text Processor",
+    id: "show-processor",
+    name: "Show Processor",
     icon: "📝",
-    description: "Run a Python script over pasted text and copy the result back out.",
-    component: TextProcessor,
+    description: "Reshape show text with your own Python scripts — reformat, translate, clean up.",
+    component: ShowProcessor,
   },
 ];
 

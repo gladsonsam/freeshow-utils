@@ -4,7 +4,7 @@ A lightweight desktop companion for [FreeShow](https://freeshow.app).
 
 - **Stage Display** — live lyrics, chords and cues on a second screen, rendered by templates you
   write in plain HTML/CSS/JS. Pick a display, hit Activate.
-- **Text Processor** — run a Python script over pasted text and copy the result back out.
+- **Show Processor** — reshape show text with your own Python scripts.
 
 Read-only: it subscribes to FreeShow's output feed and never sends anything that changes a
 running service.
@@ -35,7 +35,7 @@ Full data contract: [template guide](src/lib/modules/stage-display/starters/READ
 
 ## Development
 
-Needs Node.js and Rust (plus Python 3 for the Text Processor).
+Needs Node.js and Rust (plus Python 3 for the Show Processor).
 
 ```bash
 npm install

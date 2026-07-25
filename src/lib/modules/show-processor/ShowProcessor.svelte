@@ -118,7 +118,7 @@
 
 <svelte:window onkeydown={handleKeyDown} />
 
-<div class="text-processor">
+<div class="show-processor">
   <aside class="scripts-column">
     <Panel title="Scripts" padded={false} scroll>
       {#snippet actions()}
@@ -209,7 +209,7 @@
 </div>
 
 <style>
-  .text-processor {
+  .show-processor {
     flex: 1;
     display: flex;
     gap: var(--space-4);
