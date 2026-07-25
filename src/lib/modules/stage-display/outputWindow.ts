@@ -140,6 +140,10 @@ export async function openOutputWindow(
     decorations: false,
     resizable: true,
     focus: true,
+    // this is a stage monitor mirroring lyrics, not something the operator
+    // alt-tabs to - each one showing up as its own taskbar entry just spams
+    // the taskbar, especially with several running at once
+    skipTaskbar: true,
   });
 
   await new Promise<void>((resolve, reject) => {
