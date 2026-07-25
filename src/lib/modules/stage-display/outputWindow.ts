@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { getAllWebviewWindows, WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { availableMonitors, primaryMonitor, type Monitor } from "@tauri-apps/api/window";
 import type { TemplateMeta } from "./templates";
 
@@ -20,6 +20,11 @@ export type Display = {
 /** "Display 1 — 1920 × 1080" */
 export function displayLabel(display: Display): string {
   return `${display.name} — ${display.width} × ${display.height}${display.primary ? " (primary)" : ""}`;
+}
+
+/** "Display 1 · 1920×1080", for the cramped per-template picker */
+export function shortDisplayLabel(display: Display): string {
+  return `${display.name} · ${display.width}×${display.height}`;
 }
 
 /**
@@ -66,6 +71,28 @@ export async function listDisplays(): Promise<Display[]> {
  */
 export function resolveDisplay(displays: Display[], name: string | null, index: number) {
   return displays.find((d) => name && d.name === name) ?? displays[index] ?? displays[0] ?? null;
+}
+
+/**
+ * Which templates currently have an output window up. Several run at once on a
+ * multi-monitor stage, so this is the source of truth for the gallery rather
+ * than anything the gallery tracks itself - output windows can also be closed
+ * from the keyboard, or fail to open at all.
+ */
+export async function listOpenOutputs(): Promise<Set<string>> {
+  const prefix = outputLabel("");
+  const windows = await getAllWebviewWindows();
+  return new Set(
+    windows
+      .filter((window) => window.label.startsWith(prefix))
+      .map((window) => window.label.slice(prefix.length)),
+  );
+}
+
+/** Close one template's output window. Closing one that isn't open is a no-op. */
+export async function closeOutputWindow(templateId: string): Promise<void> {
+  const existing = await WebviewWindow.getByLabel(outputLabel(templateId));
+  await existing?.close();
 }
 
 /** what the backend managed to do about the display choice */

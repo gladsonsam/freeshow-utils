@@ -8,6 +8,10 @@
   let template = $state<Template | null>(null);
   let errorMessage = $state("");
 
+  // Nothing here may listen for close-requested. Tauri answers a JS listener by
+  // vetoing the close and waiting for the frontend to destroy the window itself,
+  // so a listener that fails - or lacks the destroy permission - leaves an output
+  // window that cannot be shut. The gallery watches for closures instead.
   onMount(async () => {
     const id = new URLSearchParams(location.search).get("template");
     if (!id) {

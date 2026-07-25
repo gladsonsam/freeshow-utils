@@ -13,6 +13,10 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Label prefix every stage output window carries. Mirrors `outputLabel` in
+/// `outputWindow.ts` and the `output-*` glob in the capability file.
+pub const OUTPUT_LABEL_PREFIX: &str = "output-";
+
 /// The display to land on, in logical (scale-adjusted) pixels, which is the same
 /// space GDK reports monitor geometry in.
 #[derive(Debug, Clone, Deserialize)]
