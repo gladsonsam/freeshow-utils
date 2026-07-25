@@ -144,11 +144,20 @@ export function toSlideMedia(resolved: ResolvedSlide | null, src: string): Slide
   return { src, type: mediaType(path, ref.type), path, name: ref.name || "" };
 }
 
-export function slideTextLines(slide: ShowSlide | null): ShowLine[] {
+/**
+ * The slide's text boxes, each kept separate. Bilingual shows put one language
+ * per item, so collapsing them here would throw away the only thing a template
+ * could use to show just one of them.
+ */
+export function slideTextItems(slide: ShowSlide | null): ShowLine[][] {
   if (!slide?.items) return [];
   return slide.items
     .filter((item) => !item.type || item.type === "text")
-    .flatMap((item) => item.lines || []);
+    .map((item) => item.lines || []);
+}
+
+export function slideTextLines(slide: ShowSlide | null): ShowLine[] {
+  return slideTextItems(slide).flat();
 }
 
 /** pull a colour out of a FreeShow inline style string */
@@ -189,10 +198,12 @@ export function toStageLine(line: ShowLine): StageLine {
 export function toSlideView(resolved: ResolvedSlide | null, mediaSrc = ""): SlideView | null {
   if (!resolved) return null;
   const { slide, parent } = resolved;
+  const items = slideTextItems(slide).map((lines) => ({ lines: lines.map(toStageLine) }));
   return {
     group: slide.group || parent?.group || "",
     color: slide.color || parent?.color || "",
-    lines: slideTextLines(slide).map(toStageLine),
+    lines: items.flatMap((item) => item.lines),
+    items,
     media: toSlideMedia(resolved, mediaSrc),
   };
 }

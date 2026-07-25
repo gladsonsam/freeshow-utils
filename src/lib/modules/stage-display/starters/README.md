@@ -42,7 +42,9 @@ Two equivalent ways, use whichever suits:
 SlideView = {
   group: string,           // "Verse 1", "Chorus", …
   color: string,           // the group's accent colour, e.g. "#5825f5"
-  lines: StageLine[]
+  lines: StageLine[],      // every text item's lines run together
+  items: [{ lines: StageLine[] }],  // the same lines, grouped by text box
+  media: SlideMedia|null   // the slide's own picture (a PDF page, an imported deck)
 }
 
 StageLine = {
@@ -52,6 +54,12 @@ StageLine = {
   spans: [{ text: string, color: string }]   // FreeShow's inline colour runs
 }
 ```
+
+A slide is not one block of words. FreeShow keeps each text box as its own item, and a bilingual
+show uses that to hold a language in each — the original in the first, the singable
+transliteration in the second. `lines` runs them together; `items` keeps them apart, so a stage
+screen with room for only one language can pick it. `lyrics-chords.html` does exactly that, with
+`ITEM_INDEX` at the top of its script.
 
 `chord.charIndex` indexes into `line.text`. An index at or past `text.length` means the chord sits
 past the end of the line — see `lyrics-chords.html` for one way to place both cases.

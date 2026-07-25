@@ -227,6 +227,20 @@
 </div>
 
 <script>
+  // Which text box to sing from. A bilingual show keeps each language in its own
+  // item - the original in the first, the transliteration with the chords in the
+  // second - and a stage screen only has room for one. 0 is the first item, 1
+  // the second, and so on; slides with a single item are unaffected either way.
+  var ITEM_INDEX = 1;
+
+  // The chosen item, or the last one if the slide has fewer than that. A slide
+  // with only one item keeps behaving exactly as it always did.
+  function slideLines(slide) {
+    var items = slide.items || [];
+    if (items.length < 2) return slide.lines;
+    return (items[ITEM_INDEX] || items[items.length - 1]).lines;
+  }
+
   function esc(value) {
     return String(value == null ? "" : value).replace(/[&<>"]/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
@@ -300,7 +314,7 @@
   // Words if the slide has any, otherwise its picture. A slide can have both -
   // lyrics over a still - and then the words win and the still stays behind.
   function slideImage(slide) {
-    if (!slide || slide.lines.length) return "";
+    if (!slide || slideLines(slide).length) return "";
     if (!slide.media || slide.media.type !== "image") return "";
     return imageUsable(slide.media.src) ? slide.media.src : "";
   }
@@ -312,7 +326,7 @@
     var body = image
       ? '<div class="lyrics media"><img alt="" src="' + esc(image) + '"></div>'
       : '<div class="lyrics"><div class="fit">' +
-        slide.lines.map(lineHtml).join("") +
+        slideLines(slide).map(lineHtml).join("") +
         "</div></div>";
 
     return (

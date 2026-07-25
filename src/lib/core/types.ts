@@ -96,12 +96,28 @@ export interface SlideMedia {
   name: string;
 }
 
+/**
+ * One text box on the slide, kept whole.
+ *
+ * A slide is not one block of words: FreeShow stores each text box as its own
+ * item, and bilingual shows use that to hold a language per item - the original
+ * in one, the transliteration in another. A stage screen usually has room for
+ * only one of them, so templates need to be able to tell them apart. `items` is
+ * in FreeShow's stored order, which is the order the lines are written in.
+ */
+export interface SlideTextItem {
+  lines: StageLine[];
+}
+
 export interface SlideView {
   /** slide group name, e.g. "Verse 1" */
   group: string;
   /** group accent colour, e.g. "#5825f5" */
   color: string;
+  /** every text item's lines, run together - the whole slide as one list */
   lines: StageLine[];
+  /** the same lines, still grouped by the text box they came from */
+  items: SlideTextItem[];
   /** this slide's own image, or null - see SlideMedia */
   media: SlideMedia | null;
 }

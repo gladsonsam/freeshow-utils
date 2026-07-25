@@ -1,5 +1,5 @@
 import { formatClock } from "$lib/core/stageState";
-import type { SlideMedia, StageData, StageLine } from "$lib/core/types";
+import type { SlideMedia, SlideTextItem, StageData, StageLine } from "$lib/core/types";
 
 function line(text: string, chords: [string, number][] = []): StageLine {
   return {
@@ -35,15 +35,16 @@ const fixtureMedia: SlideMedia = {
 /**
  * Stand-in data so the editor preview still shows something when FreeShow isn't
  * connected. Deliberately exercises the awkward cases: several chords per line,
- * a slash chord, a numbered chord, group colours, and - as the next slide - a
- * textless slide that is nothing but an image, the shape a PDF import takes.
+ * a slash chord, a numbered chord, group colours, a bilingual slide whose two
+ * languages sit in separate text items, and - as the next slide - a textless
+ * slide that is nothing but an image, the shape a PDF import takes.
  */
 export function fixtureStageData(timestamp: number = Date.now()): StageData {
-  return {
-    connected: true,
-    current: {
-      group: "Verse 1",
-      color: "#5825f5",
+  // as a bilingual show stores it: the original in one text box, the singable
+  // transliteration (the one carrying chords) in the next
+  const currentItems: SlideTextItem[] = [
+    { lines: [line("अमेजिंग ग्रेस, हाउ स्वीट"), line("दैट सेव्ड अ रेच लाइक मी")] },
+    {
       lines: [
         line("Amazing grace, how sweet the sound", [
           ["G", 0],
@@ -55,12 +56,23 @@ export function fixtureStageData(timestamp: number = Date.now()): StageData {
           ["D7", 20],
         ]),
       ],
+    },
+  ];
+
+  return {
+    connected: true,
+    current: {
+      group: "Verse 1",
+      color: "#5825f5",
+      lines: currentItems.flatMap((item) => item.lines),
+      items: currentItems,
       media: null,
     },
     next: {
       group: "Slide 2",
       color: "#f0008c",
       lines: [],
+      items: [],
       media: fixtureMedia,
     },
     showName: "Amazing Grace",
