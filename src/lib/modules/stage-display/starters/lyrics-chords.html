@@ -111,7 +111,10 @@
     display: inline-flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 2.4vh;
+    /* the space between one line's words and the next line's chords - tighter
+       than the chord strip above, so each chord reads as belonging to the line
+       under it rather than floating between the two */
+    gap: 1.6vh;
     /* scale toward the left edge so autofit never drifts the lines inward */
     transform-origin: left center;
   }
@@ -120,9 +123,13 @@
     position: relative;
   }
 
+  /* the strip the chords are painted into. Its height is the whole gap between
+     a chord and the word beneath it, so it is sized in vh like everything else
+     here - in em it would stay a fixed pixel height on a smaller screen while
+     the lyrics around it shrank */
   .chords {
     position: relative;
-    height: 1.3em;
+    height: 2.4vh;
     line-height: 0;
     white-space: nowrap;
   }
@@ -141,7 +148,7 @@
     top: 0;
     line-height: 1;
     font-weight: 700;
-    font-size: 2.7vh;
+    font-size: 3.1vh;
     color: #f5b400;
     white-space: nowrap;
   }
