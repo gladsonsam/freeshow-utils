@@ -37,6 +37,7 @@
     background: transparent;
     border: none;
     border-top: 2px solid transparent;
+    border-radius: var(--radius) var(--radius) 0 0;
     color: var(--text-dim);
     font-size: 0.85rem;
     font-weight: 500;

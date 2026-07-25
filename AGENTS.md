@@ -97,8 +97,9 @@ Things that will silently bite you:
 - Starter templates are real `.html` files imported with Vite's `?raw`. Edit the files.
 
 Styling tokens in `src/lib/ui/theme.css` are FreeShow's own values, so modules blend in. Its
-conventions: selection is a `--secondary` outline (never a left accent bar), corners are square,
-surfaces flat, headers normal case. Native `select` is drawn manually and `color-scheme: dark` is
+conventions: selection is a `--secondary` outline (never a left accent bar), corners are rounded
+with `--radius` (anything that paints a background or border, never a bare rectangle), surfaces
+flat, headers normal case. Native `select` is drawn manually and `color-scheme: dark` is
 set on `:root` — without both, dropdowns render white-on-white in the webview.
 
 Type-checking does not catch visual regressions. Run the app and look at it.

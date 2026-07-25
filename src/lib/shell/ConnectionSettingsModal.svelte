@@ -99,6 +99,7 @@
     padding: var(--space-3);
     background: var(--danger-soft);
     border: 1px solid var(--danger);
+    border-radius: var(--radius);
     color: var(--danger);
     font-size: 0.8rem;
     line-height: 1.45;

@@ -29,6 +29,7 @@
     height: 2rem;
     background: transparent;
     border: none;
+    border-radius: var(--radius);
     color: var(--text-dim);
     cursor: pointer;
     transition:

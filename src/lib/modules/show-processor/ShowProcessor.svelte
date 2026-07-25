@@ -300,6 +300,7 @@
     padding: var(--space-2) var(--space-3);
     background: transparent;
     border: 1px solid transparent;
+    border-radius: var(--radius);
     color: var(--text-dim);
     text-align: left;
     font-size: 0.85rem;
@@ -356,6 +357,7 @@
     padding: var(--space-3) var(--space-4);
     background: var(--danger-soft);
     border: 1px solid var(--danger);
+    border-radius: var(--radius);
     color: var(--danger);
     font-size: 0.85rem;
   }

@@ -82,6 +82,7 @@
     padding: var(--space-2) var(--space-3);
     background: transparent;
     border: 1px solid transparent;
+    border-radius: var(--radius);
     color: var(--text-dim);
     text-align: left;
     font-size: 0.9rem;

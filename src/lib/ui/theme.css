@@ -5,7 +5,8 @@
  *
  * The conventions worth knowing, because the components below lean on them:
  *   - selection is a --secondary outline, never a left accent bar
- *   - surfaces are flat; corners are square except for pills and dialogs
+ *   - surfaces are flat, but their corners are rounded - --radius on anything
+ *     that paints a background or a border, so nothing is a bare rectangle
  *   - hover/focus are white overlays, not new colours
  */
 
@@ -47,7 +48,7 @@
   --space-5: 1.5rem;
   --space-6: 2rem;
 
-  /* FreeShow keeps corners square nearly everywhere; 5px is its one rounding */
+  /* FreeShow rounds its boxes; 5px is the curve it uses */
   --radius: 5px;
   --radius-pill: 999px;
 
@@ -90,7 +91,7 @@ textarea,
 select {
   background: var(--primary-darker);
   border: 1px solid transparent;
-  border-radius: 0;
+  border-radius: var(--radius);
   color: var(--text);
   padding: var(--space-2) var(--space-3);
   transition: border-color var(--transition);
@@ -146,6 +147,7 @@ select:disabled {
 
 ::-webkit-scrollbar-thumb {
   background: var(--primary-lighter);
+  border-radius: var(--radius-pill);
 }
 
 ::-webkit-scrollbar-thumb:hover {

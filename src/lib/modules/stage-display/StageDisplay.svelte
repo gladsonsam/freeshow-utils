@@ -452,6 +452,7 @@
     flex-direction: column;
     background: var(--primary);
     border: 1px solid var(--line);
+    border-radius: var(--radius);
     transition: border-color var(--transition);
   }
 
@@ -527,6 +528,7 @@
     padding: var(--space-3) var(--space-4);
     background: var(--danger-soft);
     border: 1px solid var(--danger);
+    border-radius: var(--radius);
     color: var(--danger);
     font-size: 0.85rem;
   }
@@ -535,6 +537,7 @@
     padding: var(--space-3) var(--space-4);
     background: rgb(245 180 0 / 0.14);
     border: 1px solid var(--warning);
+    border-radius: var(--radius);
     color: var(--warning);
     font-size: 0.85rem;
   }

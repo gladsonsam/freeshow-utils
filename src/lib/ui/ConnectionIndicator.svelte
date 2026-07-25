@@ -28,6 +28,7 @@
     padding: var(--space-1) var(--space-2);
     background: transparent;
     border: none;
+    border-radius: var(--radius);
     color: var(--text-dim);
     font-size: 0.8rem;
     cursor: pointer;

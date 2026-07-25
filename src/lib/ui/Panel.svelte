@@ -37,6 +37,7 @@
     min-height: 0;
     background: var(--primary);
     border: 1px solid var(--line);
+    border-radius: var(--radius);
     overflow: hidden;
   }
 

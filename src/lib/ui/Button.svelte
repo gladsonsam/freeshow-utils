@@ -33,7 +33,7 @@
     justify-content: center;
     gap: var(--space-2);
     border: 1px solid transparent;
-    border-radius: 0;
+    border-radius: var(--radius);
     font-weight: 500;
     cursor: pointer;
     white-space: nowrap;
