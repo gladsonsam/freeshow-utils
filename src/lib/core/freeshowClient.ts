@@ -88,8 +88,11 @@ export class FreeShowClient {
         case "OUT":
           this.out.set(msg.data);
           break;
+        // Sent with an id but no show whenever the output isn't a show at all -
+        // scripture, say. Caching that would put an undefined entry in the map
+        // and mask a show that later arrives under the same id.
         case "SHOW_DATA":
-          if (msg.data?.id) {
+          if (msg.data?.id && msg.data.show) {
             this.shows.update((cache) => ({ ...cache, [msg.data.id]: msg.data.show }));
           }
           break;

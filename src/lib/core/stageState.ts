@@ -1,11 +1,15 @@
 import { derived, readable, writable, type Readable } from "svelte/store";
 import { freeshowClient, type FreeShowClient } from "./freeshowClient";
+import { TEMP_SLIDE_ID } from "./types";
 import type {
   Chord,
   Out,
+  OutSlideRef,
   Project,
   ProjectItem,
+  Scripture,
   Show,
+  ShowItem,
   ShowLine,
   ShowSlide,
   SlideMedia,
@@ -66,6 +70,57 @@ export type ResolvedSlide = {
   mediaId: string | null;
 };
 
+/** does this item have any text at all, once blank spans are ignored? */
+function hasText(item: ShowItem): boolean {
+  return (item.lines || []).some((line) =>
+    (line.text || []).some((span) => (span.value || "").trim().length > 0),
+  );
+}
+
+/** pull a resolved `{scripture_*}` placeholder off the slide reference */
+function dynamicValue(slideRef: OutSlideRef | undefined, key: string): string {
+  const value = slideRef?.customDynamicValues?.[key];
+  return typeof value === "string" ? value : "";
+}
+
+/**
+ * Resolve a slide FreeShow built on the fly - which in practice means scripture.
+ *
+ * There is no show and no layout to index into: the verse on screen arrives
+ * whole in `tempItems`, and the verses around it in `previousSlides` /
+ * `nextSlides`, nearest first. Looking this up the normal way finds nothing at
+ * all, which is why scripture used to leave a template with an empty screen.
+ *
+ * Neighbours past the ends of the passage come back as empty item shells rather
+ * than as nothing, so "has any words" - not "exists" - is what decides whether
+ * there is a slide there. Without that, the verse before Genesis 1:1 renders as
+ * a blank second block instead of being left out.
+ */
+export function resolveTempSlide(slideRef: OutSlideRef, offset: number): ResolvedSlide | null {
+  const items =
+    offset === 0
+      ? slideRef.tempItems
+      : offset > 0
+        ? slideRef.nextSlides?.[offset - 1]
+        : slideRef.previousSlides?.[-offset - 1];
+
+  const withText = (items || []).filter(hasText);
+  if (!withText.length) return null;
+
+  return {
+    // Only the slide actually on screen knows its own reference - FreeShow sends
+    // neighbours as bare text - so labelling them too would put the current
+    // verse's reference on the wrong verse.
+    slide: {
+      group: offset === 0 ? dynamicValue(slideRef, "scripture_reference_full") : "",
+      items: withText,
+    },
+    parent: null,
+    show: {},
+    mediaId: null,
+  };
+}
+
 /** resolve out.slide (showId + layoutId + index) -> the real slide content */
 export function resolveSlide(
   out: Out | null,
@@ -74,6 +129,7 @@ export function resolveSlide(
 ): ResolvedSlide | null {
   const slideRef = out?.out?.slide;
   if (!slideRef?.id) return null;
+  if (slideRef.id === TEMP_SLIDE_ID) return resolveTempSlide(slideRef, offset);
 
   const show = shows[slideRef.id];
   if (!show) return null;
@@ -171,9 +227,16 @@ export function extractColor(style?: string): string | null {
  * Flatten a FreeShow line into the template-facing shape.
  *
  * Chord positions are recorded by FreeShow against the *trimmed* span values, so
- * `text` is built the same way - that keeps `chord.charIndex` a valid index into
- * `text`. Raw (untrimmed) span values are kept separately in `spans` for
- * templates that want FreeShow's inline per-span colouring.
+ * a chorded line's `text` is built the same way - that keeps `chord.charIndex` a
+ * valid index into `text`. Raw (untrimmed) span values are kept separately in
+ * `spans` for templates that want FreeShow's inline per-span colouring.
+ *
+ * That trim is only ever a concession to the chord coordinate space, and it
+ * costs real spacing: FreeShow separates a verse number from its verse, and one
+ * verse from the next, with whitespace that lives at the edge of a span, so
+ * trimming runs them together as "16For God so loved". A line carrying no chords
+ * has no coordinate space to protect, so it keeps its spacing intact - which is
+ * every scripture line, and any lyric line nobody has put a chord on.
  */
 export function toStageLine(line: ShowLine): StageLine {
   const spans = (line.text || []).map((span) => ({
@@ -181,7 +244,12 @@ export function toStageLine(line: ShowLine): StageLine {
     color: extractColor(span.style) || "#ffffff",
   }));
 
-  const text = spans.map((span) => span.text.trim()).join("");
+  const text = line.chords?.length
+    ? spans.map((span) => span.text.trim()).join("")
+    : spans
+        .map((span) => span.text)
+        .join("")
+        .trim();
 
   const chords: Chord[] = [...(line.chords || [])]
     .sort((a, b) => a.pos - b.pos)
@@ -205,6 +273,43 @@ export function toSlideView(resolved: ResolvedSlide | null, mediaSrc = ""): Slid
     lines: items.flatMap((item) => item.lines),
     items,
     media: toSlideMedia(resolved, mediaSrc),
+  };
+}
+
+/** how many translations FreeShow will put on one scripture slide */
+const MAX_TRANSLATIONS = 4;
+
+/**
+ * The reference around the verse on screen, or null if this isn't scripture.
+ *
+ * FreeShow has already resolved all of this to fill in the `{scripture_*}`
+ * placeholders on the slide, so a template never has to parse a reference back
+ * out of the rendered words. Other temporary output (a PDF page, say) carries no
+ * such values, which is what tells the two apart.
+ */
+export function toScripture(out: Out | null): Scripture | null {
+  const slideRef = out?.out?.slide;
+  if (slideRef?.id !== TEMP_SLIDE_ID) return null;
+
+  const reference = dynamicValue(slideRef, "scripture_reference_full");
+  const versionLabel = dynamicValue(slideRef, "scripture_name");
+  if (!reference && !versionLabel) return null;
+
+  const versions: string[] = [];
+  for (let index = 1; index <= MAX_TRANSLATIONS; index++) {
+    const name = dynamicValue(slideRef, `scripture${index}_name`);
+    if (name) versions.push(name);
+  }
+
+  return {
+    reference,
+    book: dynamicValue(slideRef, "scripture_book"),
+    bookAbbreviation: dynamicValue(slideRef, "scripture_book_abbr"),
+    chapter: dynamicValue(slideRef, "scripture_chapter"),
+    verses: dynamicValue(slideRef, "scripture_verses"),
+    versions,
+    versionLabel,
+    attribution: slideRef.attributionString || "",
   };
 }
 
@@ -248,6 +353,7 @@ export const EMPTY_STAGE_DATA: StageData = {
   showName: "",
   nextItemName: "",
   background: "",
+  scripture: null,
   clock: formatClock(0),
   timestamp: 0,
 };
@@ -283,6 +389,7 @@ export function createStageState(client: FreeShowClient): Readable<StageData> {
       }
 
       const showId = out?.out?.slide?.id;
+      const scripture = toScripture(out);
 
       return {
         connected: status === "connected",
@@ -291,9 +398,14 @@ export function createStageState(client: FreeShowClient): Readable<StageData> {
         // ever comes from the next slide's own layout entry.
         current: toSlideView(resolveSlide(out, shows, 0), background),
         next: toSlideView(resolveSlide(out, shows, 1), nextBackground),
-        showName: (showId && shows[showId]?.name) || "",
+        // scripture has no show behind it, so the chapter stands in as the thing
+        // being presented - leaving the verse itself to `current.group`
+        showName: scripture
+          ? `${scripture.book} ${scripture.chapter}`.trim() || scripture.reference
+          : (showId && shows[showId]?.name) || "",
         nextItemName: nextItem ? nextItem.name || names[nextItem.id] || "" : "",
         background,
+        scripture,
         clock: formatClock(timestamp),
         timestamp,
       } satisfies StageData;

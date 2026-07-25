@@ -41,13 +41,35 @@ export type Show = {
 export type ProjectItem = { id: string; index: number; name?: string; type?: string };
 export type Project = { name: string; shows: ProjectItem[] };
 
-/** what FreeShow reports as currently on-screen */
+/**
+ * What FreeShow reports as currently on-screen.
+ *
+ * Usually this points into a show: `id` names it, `index` the position in
+ * `layout`. Scripture has no show to point at - FreeShow builds the verse on the
+ * fly and sends it inline, with `id` set to `TEMP_SLIDE_ID` and the slide itself
+ * in `tempItems`. Nothing is ever added to the show cache for it.
+ */
 export type OutSlideRef = {
   id?: string;
   layout?: string;
   index?: number;
   projectIndex?: number;
+  /** the items of the temporary slide on screen (scripture) */
+  tempItems?: ShowItem[];
+  /** the same, for the verses either side of it - nearest first, up to three */
+  previousSlides?: ShowItem[][];
+  nextSlides?: ShowItem[][];
+  /**
+   * the values FreeShow resolved for this slide's `{scripture_*}` placeholders -
+   * reference, book, chapter, verse numbers and translation names
+   */
+  customDynamicValues?: Record<string, unknown>;
+  /** attribution an online bible requires be shown, or "" */
+  attributionString?: string;
 };
+
+/** the id FreeShow gives output it built on the fly rather than read from a show */
+export const TEMP_SLIDE_ID = "temp";
 export type Out = { out?: { slide?: OutSlideRef } };
 
 // ── Public template-facing contract ───────────────────────────────────────────
@@ -122,11 +144,38 @@ export interface SlideView {
   media: SlideMedia | null;
 }
 
+/**
+ * Set when what is on screen is a bible passage rather than a show.
+ *
+ * The verse text is in `current` like any other slide - this is the reference
+ * around it, already resolved by FreeShow, so a template doesn't have to parse
+ * it back out of the words. A slide showing several translations at once keeps
+ * each one as its own entry in `current.items`, in the same order as `versions`.
+ */
+export interface Scripture {
+  /** the passage on screen, e.g. "Genesis 1:2" */
+  reference: string;
+  /** e.g. "Genesis" */
+  book: string;
+  /** FreeShow's abbreviation for the book, e.g. "Gen" */
+  bookAbbreviation: string;
+  /** e.g. "1" - a string, because that is how FreeShow reports it */
+  chapter: string;
+  /** just the verse part of the reference, e.g. "2" or "2-4" */
+  verses: string;
+  /** every translation on screen, in the order their text items appear */
+  versions: string[];
+  /** all of them as one label, e.g. "NKJV + ESV" */
+  versionLabel: string;
+  /** attribution an online bible requires be shown, or "" */
+  attribution: string;
+}
+
 export interface StageData {
   connected: boolean;
   current: SlideView | null;
   next: SlideView | null;
-  /** name of the show currently playing */
+  /** name of the show currently playing, or the passage's book and chapter */
   showName: string;
   /** name of the next item queued in the project (song, section, video, …) */
   nextItemName: string;
@@ -137,6 +186,8 @@ export interface StageData {
    * use `current.media` instead.
    */
   background: string;
+  /** the passage on screen, or null when this isn't scripture - see Scripture */
+  scripture: Scripture | null;
   /** pre-formatted local time, e.g. "7:04 PM" */
   clock: string;
   /** ms epoch of the last update - format your own clock from this if you like */

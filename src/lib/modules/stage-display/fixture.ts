@@ -78,6 +78,68 @@ export function fixtureStageData(timestamp: number = Date.now()): StageData {
     showName: "Amazing Grace",
     nextItemName: "Welcome Video",
     background: "",
+    // this fixture is a song; see fixtureScriptureData for the scripture shape
+    scripture: null,
+    clock: formatClock(timestamp),
+    timestamp,
+  };
+}
+
+/**
+ * The same idea for a bible passage, which reaches a template by a different
+ * route entirely - see `resolveTempSlide`. Copied from what FreeShow actually
+ * sends: two translations in separate text items, then a third item holding the
+ * reference and version names, exactly as its scripture template lays them out.
+ * The next verse has no such item, which is why it has one item fewer.
+ */
+export function fixtureScriptureData(timestamp: number = Date.now()): StageData {
+  const currentItems: SlideTextItem[] = [
+    { lines: [line("In the beginning God created the heavens and the earth.")] },
+    { lines: [line("ആദിയിൽ ദൈവം ആകാശവും ഭൂമിയും സൃഷ്ടിച്ചു.")] },
+    { lines: [line("Genesis 1:1"), line("NKJV + Sathyavedapusthakam 1910")] },
+  ];
+
+  const nextItems: SlideTextItem[] = [
+    {
+      lines: [
+        line(
+          "The earth was without form, and void; and darkness was on the face of the deep.",
+        ),
+      ],
+    },
+    { lines: [line("ഭൂമി പാഴായും ശൂന്യമായും ഇരുന്നു; ആഴത്തിന്മീതെ ഇരുൾ ഉണ്ടായിരുന്നു.")] },
+  ];
+
+  return {
+    connected: true,
+    current: {
+      group: "Genesis 1:1",
+      color: "",
+      lines: currentItems.flatMap((item) => item.lines),
+      items: currentItems,
+      media: null,
+    },
+    next: {
+      // only the verse on screen knows its own reference
+      group: "",
+      color: "",
+      lines: nextItems.flatMap((item) => item.lines),
+      items: nextItems,
+      media: null,
+    },
+    showName: "Genesis 1",
+    nextItemName: "",
+    background: "",
+    scripture: {
+      reference: "Genesis 1:1",
+      book: "Genesis",
+      bookAbbreviation: "Gen",
+      chapter: "1",
+      verses: "1",
+      versions: ["NKJV", "Sathyavedapusthakam 1910"],
+      versionLabel: "NKJV + Sathyavedapusthakam 1910",
+      attribution: "",
+    },
     clock: formatClock(timestamp),
     timestamp,
   };

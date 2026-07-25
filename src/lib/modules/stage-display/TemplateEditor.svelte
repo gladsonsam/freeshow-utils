@@ -4,7 +4,7 @@
   import Tabs from "$lib/ui/Tabs.svelte";
   import CodeEditor from "./CodeEditor.svelte";
   import TemplateFrame from "./TemplateFrame.svelte";
-  import { fixtureStageData } from "./fixture";
+  import { fixtureScriptureData, fixtureStageData } from "./fixture";
   import type { Template } from "./templates";
 
   let {
@@ -19,10 +19,13 @@
 
   const PREVIEW_DEBOUNCE_MS = 400;
 
+  /** which data the preview feeds the template: real, or one of two stand-ins */
+  type PreviewSource = "fixture" | "scripture" | "live";
+
   let name = $state(template.name);
   let html = $state(template.html);
   let previewHtml = $state(template.html);
-  let source = $state<"live" | "fixture">("fixture");
+  let source = $state<PreviewSource>("fixture");
   let errors = $state<string[]>([]);
   let saving = $state(false);
   let savedAt = $state("");
@@ -39,9 +42,12 @@
     return () => clearTimeout(timer);
   });
 
-  let previewData = $derived(
-    source === "live" ? $stageData : fixtureStageData($stageData.timestamp || Date.now()),
-  );
+  let previewData = $derived.by(() => {
+    const timestamp = $stageData.timestamp || Date.now();
+    if (source === "live") return $stageData;
+    if (source === "scripture") return fixtureScriptureData(timestamp);
+    return fixtureStageData(timestamp);
+  });
 
   async function save() {
     if (saving) return;
@@ -104,11 +110,12 @@
         <span class="pane-title">Preview</span>
         <Tabs
           tabs={[
-            { id: "fixture", label: "Sample data" },
+            { id: "fixture", label: "Song" },
+            { id: "scripture", label: "Scripture" },
             { id: "live", label: $stageData.connected ? "Live" : "Live (offline)" },
           ]}
           active={source}
-          onSelect={(id) => (source = id as "live" | "fixture")}
+          onSelect={(id) => (source = id as PreviewSource)}
         />
       </div>
       <div class="preview-stage">
