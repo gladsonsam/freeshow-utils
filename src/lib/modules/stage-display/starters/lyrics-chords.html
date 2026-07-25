@@ -1,4 +1,8 @@
 <style>
+  * {
+    box-sizing: border-box;
+  }
+
   /* the rules below set display on these elements, which would otherwise beat
      the browser's default styling for [hidden] */
   [hidden] {
@@ -75,11 +79,22 @@
   .lyrics {
     flex: 1;
     display: flex;
-    flex-direction: column;
+    align-items: center;
     justify-content: center;
-    gap: 2.4vh;
     padding: 2.4vh 3.6vh;
+    min-width: 0;
     overflow: hidden;
+  }
+
+  /* shrink-wraps the lines so autofit can measure their real size, then scales
+     the whole group uniformly - uniform scale is what keeps chords sitting over
+     the right characters */
+  .fit {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2.4vh;
+    transform-origin: center center;
   }
 
   .line {
@@ -121,6 +136,7 @@
     font-size: 4.6vh;
     font-weight: 700;
     line-height: 1.25;
+    white-space: nowrap;
   }
 
   #bar {
@@ -245,11 +261,41 @@
       groupStyle +
       ">" +
       esc(slide.group) +
-      '</div><div class="lyrics">' +
+      '</div><div class="lyrics"><div class="fit">' +
       slide.lines.map(lineHtml).join("") +
-      "</div></div>"
+      "</div></div></div>"
     );
   }
+
+  // Scale each slide's lines down until they fit their box. Without this a slide
+  // with several chorded lines simply overflows and gets clipped.
+  function autofit() {
+    var boxes = document.querySelectorAll(".lyrics");
+    for (var i = 0; i < boxes.length; i++) {
+      var box = boxes[i];
+      var fit = box.firstElementChild;
+      if (!fit) continue;
+
+      fit.style.transform = "scale(1)";
+
+      var style = getComputedStyle(box);
+      var availableWidth =
+        box.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      var availableHeight =
+        box.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+      if (availableWidth <= 0 || availableHeight <= 0) continue;
+
+      var scale = Math.min(
+        1,
+        availableWidth / fit.offsetWidth,
+        availableHeight / fit.offsetHeight
+      );
+      if (scale < 1) fit.style.transform = "scale(" + scale + ")";
+    }
+  }
+
+  // transform doesn't affect layout, so observing the body can't loop
+  if (window.ResizeObserver) new ResizeObserver(autofit).observe(document.body);
 
   window.onFreeShowUpdate = function (data) {
     var stage = document.getElementById("stage");
@@ -270,5 +316,7 @@
     document.getElementById("showName").textContent = data.showName || "—";
     document.getElementById("nextName").textContent = data.nextItemName || "—";
     document.getElementById("clock").textContent = data.clock;
+
+    autofit();
   };
 </script>

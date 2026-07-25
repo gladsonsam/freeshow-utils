@@ -61,6 +61,23 @@ past the end of the line — see `lyrics-chords.html` for one way to place both 
 Output windows are opened at whatever size the operator drags them to, so size everything in `vh`
 / `vw` / `%` rather than `px`, and the template will scale to any screen.
 
+That still isn't enough for a slide with six chorded lines, which will simply overflow. Both lyric
+starters handle it by measuring after each render and scaling the whole group down to fit:
+
+```js
+fit.style.transform = "scale(1)"; // measure unscaled
+var scale = Math.min(1, box.clientWidth / fit.offsetWidth, box.clientHeight / fit.offsetHeight);
+if (scale < 1) fit.style.transform = "scale(" + scale + ")";
+```
+
+Scale the group *uniformly* rather than shrinking the font — that's what keeps chords sitting over
+the right characters. Two traps: the element you measure must shrink-wrap its contents
+(`display: inline-flex`), and a CSS grid track needs `minmax(0, 1fr)` rather than `1fr`, or it
+refuses to shrink below its content and there's never anything to fit into.
+
+Re-run it on resize with a `ResizeObserver` — `transform` doesn't affect layout, so observing
+`document.body` can't loop.
+
 ## Starters
 
 - **Lyrics & Chords** — two-slide view with chords positioned over the lyrics, group tabs, and a

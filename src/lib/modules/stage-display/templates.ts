@@ -67,6 +67,19 @@ export const STARTER_SKELETON = `<style>
 `;
 
 /**
+ * Rewrite the bundled starters, overwriting any edits to them. User-initiated
+ * only - it's the way to pick up starter fixes shipped in an app update, since
+ * seeding deliberately never overwrites files that already exist.
+ */
+export async function restoreStarters(): Promise<void> {
+  const created = new Date().toISOString();
+  for (const starter of starters) {
+    await writeTemplate({ ...starter, created });
+  }
+  await writeTemplatesReadme(startersReadme);
+}
+
+/**
  * Copy the bundled starters into the templates folder the first time the app
  * runs. Guarded by a flag rather than by "is it missing?" so a starter the user
  * deleted stays deleted.

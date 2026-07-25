@@ -5,7 +5,10 @@
   import Button from "$lib/ui/Button.svelte";
   import Modal from "$lib/ui/Modal.svelte";
   import IconButton from "$lib/ui/IconButton.svelte";
+  import { stageData } from "$lib/core/stageState";
   import TemplateEditor from "./TemplateEditor.svelte";
+  import TemplatePreview from "./TemplatePreview.svelte";
+  import { fixtureStageData } from "./fixture";
   import { outputSettings } from "./outputSettings";
   import { displayLabel, listDisplays, openOutputWindow, resolveDisplay, type Display } from "./outputWindow";
   import {
@@ -16,6 +19,7 @@
     newTemplateId,
     readTemplate,
     readTemplateFile,
+    restoreStarters,
     seedStarters,
     templatesFolder,
     writeTemplate,
@@ -23,12 +27,18 @@
     type TemplateMeta,
   } from "./templates";
 
-  let templates = $state<TemplateMeta[]>([]);
+  let templates = $state<Template[]>([]);
   let editing = $state<Template | null>(null);
   let pendingDelete = $state<TemplateMeta | null>(null);
   let errorMessage = $state("");
   let loading = $state(true);
   let displays = $state<Display[]>([]);
+  let confirmRestore = $state(false);
+
+  // previews show real output when FreeShow is up, sample data otherwise
+  let previewData = $derived(
+    $stageData.connected ? $stageData : fixtureStageData($stageData.timestamp || Date.now()),
+  );
 
   let selectedDisplay = $derived(
     resolveDisplay(displays, $outputSettings.displayName, $outputSettings.displayIndex),
@@ -64,7 +74,13 @@
 
   async function refresh() {
     try {
-      templates = await listTemplates();
+      const metas = await listTemplates();
+      // the gallery previews each template, so it needs the markup too; one
+      // unreadable file shouldn't blank the whole gallery
+      const loaded = await Promise.allSettled(metas.map((meta) => readTemplate(meta.id)));
+      templates = loaded
+        .filter((result) => result.status === "fulfilled")
+        .map((result) => (result as PromiseFulfilledResult<Template>).value);
     } catch (error) {
       errorMessage = `Could not read the templates folder: ${error}`;
     }
@@ -143,6 +159,13 @@
 
   const openFolder = () => guard(async () => openPath(await templatesFolder()));
 
+  const restore = () =>
+    guard(async () => {
+      await restoreStarters();
+      confirmRestore = false;
+      await refresh();
+    });
+
   const activate = (meta: TemplateMeta) =>
     guard(() =>
       openOutputWindow(meta, {
@@ -180,6 +203,7 @@
       <Button variant="primary" onclick={create}>+ New template</Button>
       <Button onclick={importTemplate}>Import…</Button>
       <div class="spacer"></div>
+      <Button variant="ghost" onclick={() => (confirmRestore = true)}>Restore starters</Button>
       <Button variant="ghost" onclick={openFolder}>Open templates folder</Button>
     </div>
 
@@ -221,6 +245,7 @@
       <div class="grid">
         {#each templates as template (template.id)}
           <article class="card">
+            <TemplatePreview html={template.html} data={previewData} />
             <div class="card-body">
               <h3 class="card-name">{template.name}</h3>
               {#if formatCreated(template.created)}
@@ -240,6 +265,22 @@
     {/if}
   </div>
 {/if}
+
+<Modal
+  open={confirmRestore}
+  title="Restore starter templates"
+  onClose={() => (confirmRestore = false)}
+  width="420px"
+>
+  <p class="confirm">
+    Rewrite the three bundled starters to their shipped versions. Any edits you made to those
+    three are overwritten; your own templates are untouched.
+  </p>
+  {#snippet footer()}
+    <Button variant="primary" onclick={restore}>Restore</Button>
+    <Button variant="ghost" onclick={() => (confirmRestore = false)}>Cancel</Button>
+  {/snippet}
+</Modal>
 
 <Modal
   open={!!pendingDelete}
@@ -314,16 +355,13 @@
 
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
     gap: var(--space-3);
   }
 
   .card {
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
-    gap: var(--space-4);
-    padding: var(--space-4);
     background: var(--primary);
     border: 1px solid var(--line);
     transition: border-color var(--transition);
@@ -331,6 +369,10 @@
 
   .card:hover {
     border-color: var(--secondary-opacity);
+  }
+
+  .card-body {
+    padding: var(--space-3) var(--space-4) 0;
   }
 
   .card-name {
@@ -350,6 +392,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-1);
+    padding: var(--space-3) var(--space-4);
   }
 
   .empty {
