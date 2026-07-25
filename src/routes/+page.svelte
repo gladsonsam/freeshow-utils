@@ -1,22 +1,22 @@
 <script lang="ts">
   import { freeshowClient } from "$lib/core/freeshowClient";
-  import { appFunctions, findFunction } from "$lib/functions/registry";
+  import { appModules, findModule } from "$lib/modules/registry";
   import ConnectionSettingsModal from "$lib/shell/ConnectionSettingsModal.svelte";
   import ConnectionIndicator from "$lib/ui/ConnectionIndicator.svelte";
   import Sidebar from "$lib/ui/Sidebar.svelte";
 
   const status = freeshowClient.status;
 
-  let activeId = $state(appFunctions[0].id);
+  let activeId = $state(appModules[0].id);
   let settingsOpen = $state(false);
 
-  let active = $derived(findFunction(activeId));
+  let active = $derived(findModule(activeId));
 </script>
 
 <div class="app">
   <Sidebar
     title="FreeShow Utils"
-    items={appFunctions}
+    items={appModules}
     active={activeId}
     onSelect={(id) => (activeId = id)}
   >

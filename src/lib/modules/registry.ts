@@ -2,7 +2,7 @@ import type { Component } from "svelte";
 import StageDisplay from "./stage-display/StageDisplay.svelte";
 import TextProcessor from "./text-processor/TextProcessor.svelte";
 
-export type AppFunction = {
+export type AppModule = {
   id: string;
   name: string;
   icon: string;
@@ -11,11 +11,16 @@ export type AppFunction = {
 };
 
 /**
- * Every tool the app offers. The sidebar renders straight from this list, so
- * adding a function is one entry here plus one folder under src/lib/functions -
- * the shell never needs touching.
+ * The modules that ship with the app. The sidebar renders straight from this
+ * list, so adding one is a single entry here plus a folder under src/lib/modules
+ * - the shell never needs touching.
+ *
+ * These are built in only because they shipped first. They get no privileges a
+ * third-party module wouldn't have: same connection, same UI kit, same data.
+ * Keep it that way - the goal is for this list to eventually be seeded from
+ * user-installed modules too.
  */
-export const appFunctions: AppFunction[] = [
+export const appModules: AppModule[] = [
   {
     id: "stage-display",
     name: "Stage Display",
@@ -32,6 +37,6 @@ export const appFunctions: AppFunction[] = [
   },
 ];
 
-export function findFunction(id: string): AppFunction {
-  return appFunctions.find((fn) => fn.id === id) ?? appFunctions[0];
+export function findModule(id: string): AppModule {
+  return appModules.find((module) => module.id === id) ?? appModules[0];
 }

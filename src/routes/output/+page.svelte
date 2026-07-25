@@ -2,8 +2,8 @@
   import { onMount } from "svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { stageData } from "$lib/core/stageState";
-  import TemplateFrame from "$lib/functions/stage-display/TemplateFrame.svelte";
-  import { readTemplate, type Template } from "$lib/functions/stage-display/templates";
+  import TemplateFrame from "$lib/modules/stage-display/TemplateFrame.svelte";
+  import { readTemplate, type Template } from "$lib/modules/stage-display/templates";
 
   let template = $state<Template | null>(null);
   let errorMessage = $state("");

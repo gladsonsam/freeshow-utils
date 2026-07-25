@@ -31,7 +31,7 @@ Host and ports are editable from the connection indicator in the sidebar.
 Templates are ordinary `.html` files you can import and share, edited in-app with a live preview.
 They run sandboxed — no network, no access to the app. Three starters are included.
 
-Full data contract: [template guide](src/lib/functions/stage-display/starters/README.md).
+Full data contract: [template guide](src/lib/modules/stage-display/starters/README.md).
 
 ## Development
 
