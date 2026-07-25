@@ -80,7 +80,8 @@
     flex: 1;
     display: flex;
     align-items: center;
-    justify-content: center;
+    /* vertically centred, but lyrics stay left-aligned */
+    justify-content: flex-start;
     padding: 2.4vh 3.6vh;
     min-width: 0;
     overflow: hidden;
@@ -94,7 +95,8 @@
     flex-direction: column;
     align-items: flex-start;
     gap: 2.4vh;
-    transform-origin: center center;
+    /* scale toward the left edge so autofit never drifts the lines inward */
+    transform-origin: left center;
   }
 
   .line {
