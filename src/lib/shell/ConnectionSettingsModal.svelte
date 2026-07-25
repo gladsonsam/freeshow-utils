@@ -65,10 +65,8 @@
   }
 
   .field-label {
-    font-size: 0.78rem;
+    font-size: 0.8rem;
     font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
     color: var(--text-dim);
   }
 
@@ -87,7 +85,7 @@
 
   .checkbox input {
     width: auto;
-    accent-color: var(--accent);
+    accent-color: var(--secondary);
   }
 
   .hint {
@@ -101,7 +99,6 @@
     padding: var(--space-3);
     background: var(--danger-soft);
     border: 1px solid var(--danger);
-    border-radius: var(--radius-sm);
     color: var(--danger);
     font-size: 0.8rem;
     line-height: 1.45;

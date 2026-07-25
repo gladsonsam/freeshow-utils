@@ -132,7 +132,7 @@
     align-items: center;
     gap: var(--space-3);
     padding: var(--space-3) var(--space-5);
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--line);
   }
 
   .name-input {
@@ -164,7 +164,7 @@
   }
 
   .code-pane {
-    border-right: 1px solid var(--border);
+    border-right: 1px solid var(--line);
   }
 
   .pane-head {
@@ -174,15 +174,13 @@
     justify-content: space-between;
     gap: var(--space-3);
     padding: var(--space-2) var(--space-4);
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--line);
     min-height: 44px;
   }
 
   .pane-title {
-    font-size: 0.75rem;
+    font-size: 0.85rem;
     font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
     color: var(--text-dim);
   }
 

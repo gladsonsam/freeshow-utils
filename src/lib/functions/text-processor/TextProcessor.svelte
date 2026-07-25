@@ -243,7 +243,7 @@
     flex-direction: column;
     gap: var(--space-2);
     padding: var(--space-3);
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--line);
   }
 
   .folder-path {
@@ -269,8 +269,7 @@
     width: 100%;
     padding: var(--space-2) var(--space-3);
     background: transparent;
-    border: none;
-    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
     color: var(--text-dim);
     text-align: left;
     font-size: 0.85rem;
@@ -280,13 +279,14 @@
   }
 
   .script-item:hover:not(.active) {
-    background: var(--surface-2);
+    background: var(--hover);
     color: var(--text);
   }
 
   .script-item.active {
-    background: var(--accent-soft);
-    color: var(--accent);
+    background: var(--hover);
+    border-color: var(--secondary);
+    color: var(--text);
   }
 
   .empty {
@@ -321,7 +321,6 @@
     padding: var(--space-3) var(--space-4);
     background: var(--danger-soft);
     border: 1px solid var(--danger);
-    border-radius: var(--radius-sm);
     color: var(--danger);
     font-size: 0.85rem;
   }

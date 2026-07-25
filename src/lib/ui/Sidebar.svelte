@@ -46,37 +46,42 @@
     width: 220px;
     display: flex;
     flex-direction: column;
-    background: var(--surface-1);
-    border-right: 1px solid var(--border);
+    background: var(--primary);
+    border-right: 1px solid var(--line);
   }
 
   .sidebar-head {
-    padding: var(--space-5) var(--space-4) var(--space-4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-4);
+    border-bottom: 1px solid var(--line);
   }
 
   .app-title {
-    font-size: 1.05rem;
+    font-size: 1.1rem;
     font-weight: 700;
-    letter-spacing: -0.01em;
+    letter-spacing: 0.02em;
+    color: var(--secondary);
   }
 
   .nav {
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    padding: 0 var(--space-2);
+    gap: 1px;
+    padding: var(--space-2);
     overflow-y: auto;
   }
 
+  /* FreeShow marks the selected item with a --secondary outline, not a bar */
   .nav-item {
     display: flex;
     align-items: center;
     gap: var(--space-3);
     padding: var(--space-2) var(--space-3);
     background: transparent;
-    border: none;
-    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
     color: var(--text-dim);
     text-align: left;
     font-size: 0.9rem;
@@ -87,14 +92,14 @@
   }
 
   .nav-item:hover:not(.active) {
-    background: var(--surface-2);
+    background: var(--hover);
     color: var(--text);
   }
 
   .nav-item.active {
-    background: var(--surface-3);
+    background: var(--hover);
+    border-color: var(--secondary);
     color: var(--text);
-    box-shadow: inset 2px 0 0 var(--accent);
   }
 
   .nav-icon {
@@ -105,6 +110,6 @@
   .sidebar-foot {
     flex-shrink: 0;
     padding: var(--space-3) var(--space-4);
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--line);
   }
 </style>

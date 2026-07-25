@@ -4,8 +4,10 @@
   import { openPath } from "@tauri-apps/plugin-opener";
   import Button from "$lib/ui/Button.svelte";
   import Modal from "$lib/ui/Modal.svelte";
+  import IconButton from "$lib/ui/IconButton.svelte";
   import TemplateEditor from "./TemplateEditor.svelte";
-  import { openOutputWindow } from "./outputWindow";
+  import { outputSettings } from "./outputSettings";
+  import { displayLabel, listDisplays, openOutputWindow, resolveDisplay, type Display } from "./outputWindow";
   import {
     deleteTemplate,
     exportTemplateFile,
@@ -26,6 +28,11 @@
   let pendingDelete = $state<TemplateMeta | null>(null);
   let errorMessage = $state("");
   let loading = $state(true);
+  let displays = $state<Display[]>([]);
+
+  let selectedDisplay = $derived(
+    resolveDisplay(displays, $outputSettings.displayName, $outputSettings.displayIndex),
+  );
 
   onMount(async () => {
     try {
@@ -34,8 +41,26 @@
       errorMessage = `Could not install the starter templates: ${error}`;
     }
     await refresh();
+    await refreshDisplays();
     loading = false;
   });
+
+  async function refreshDisplays() {
+    try {
+      displays = await listDisplays();
+    } catch (error) {
+      errorMessage = `Could not read the connected displays: ${error}`;
+    }
+  }
+
+  function chooseDisplay(index: number) {
+    const display = displays[index];
+    outputSettings.update((settings) => ({
+      ...settings,
+      displayIndex: index,
+      displayName: display?.name ?? null,
+    }));
+  }
 
   async function refresh() {
     try {
@@ -118,7 +143,13 @@
 
   const openFolder = () => guard(async () => openPath(await templatesFolder()));
 
-  const activate = (meta: TemplateMeta) => guard(() => openOutputWindow(meta));
+  const activate = (meta: TemplateMeta) =>
+    guard(() =>
+      openOutputWindow(meta, {
+        display: selectedDisplay,
+        fullscreen: $outputSettings.fullscreen,
+      }),
+    );
 
   const saveEdits = (template: Template) =>
     guard(async () => {
@@ -150,6 +181,32 @@
       <Button onclick={importTemplate}>Import…</Button>
       <div class="spacer"></div>
       <Button variant="ghost" onclick={openFolder}>Open templates folder</Button>
+    </div>
+
+    <div class="output-bar">
+      <span class="output-label">Output display</span>
+      <select
+        class="display-select"
+        value={String(selectedDisplay?.index ?? 0)}
+        onchange={(event) => chooseDisplay(Number(event.currentTarget.value))}
+        disabled={!displays.length}
+      >
+        {#each displays as display}
+          <option value={String(display.index)}>{displayLabel(display)}</option>
+        {/each}
+        {#if !displays.length}
+          <option value="0">No displays detected</option>
+        {/if}
+      </select>
+
+      <IconButton title="Re-scan connected displays" onclick={refreshDisplays}>⟳</IconButton>
+
+      <label class="checkbox">
+        <input type="checkbox" bind:checked={$outputSettings.fullscreen} />
+        <span>Fullscreen</span>
+      </label>
+
+      <span class="output-hint">Activate opens the template on this display.</span>
     </div>
 
     {#if errorMessage}
@@ -218,6 +275,43 @@
     flex: 1;
   }
 
+  .output-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    background: var(--primary);
+    border: 1px solid var(--line);
+  }
+
+  .output-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-dim);
+  }
+
+  .display-select {
+    min-width: 240px;
+  }
+
+  .checkbox {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: 0.85rem;
+    color: var(--text-dim);
+  }
+
+  .checkbox input {
+    width: auto;
+    accent-color: var(--secondary);
+  }
+
+  .output-hint {
+    font-size: 0.8rem;
+    color: var(--text-faint);
+  }
+
   .grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -230,9 +324,13 @@
     justify-content: space-between;
     gap: var(--space-4);
     padding: var(--space-4);
-    background: var(--surface-1);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
+    background: var(--primary);
+    border: 1px solid var(--line);
+    transition: border-color var(--transition);
+  }
+
+  .card:hover {
+    border-color: var(--secondary-opacity);
   }
 
   .card-name {
@@ -268,7 +366,6 @@
     padding: var(--space-3) var(--space-4);
     background: var(--danger-soft);
     border: 1px solid var(--danger);
-    border-radius: var(--radius-sm);
     color: var(--danger);
     font-size: 0.85rem;
   }

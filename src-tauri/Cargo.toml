@@ -2,7 +2,8 @@
 name = "freeshow-utils"
 version = "0.1.0"
 description = "Lightweight companion utilities for FreeShow"
-authors = ["you"]
+authors = ["Gladson Sam"]
+license = "GPL-3.0-only"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

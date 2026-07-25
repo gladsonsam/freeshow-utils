@@ -28,14 +28,13 @@
     padding: var(--space-1) var(--space-2);
     background: transparent;
     border: none;
-    border-radius: var(--radius-sm);
     color: var(--text-dim);
     font-size: 0.8rem;
     cursor: pointer;
   }
 
   .indicator:hover {
-    background: var(--surface-2);
+    background: var(--hover);
     color: var(--text);
   }
 
@@ -48,8 +47,8 @@
   }
 
   .dot.connected {
-    background: var(--success);
-    box-shadow: 0 0 6px var(--success);
+    background: var(--connected);
+    box-shadow: 0 0 6px var(--connected);
   }
 
   .dot.connecting {

@@ -55,7 +55,7 @@
     flex-direction: column;
     min-width: 0;
     overflow: hidden;
-    background: var(--surface-0);
+    background: var(--primary-darkest);
   }
 
   .main-head {
@@ -65,7 +65,7 @@
     justify-content: space-between;
     gap: var(--space-4);
     padding: var(--space-4) var(--space-5);
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--line);
   }
 
   .titles {

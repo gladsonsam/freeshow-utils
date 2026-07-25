@@ -102,6 +102,12 @@ if __name__ == "__main__":
 
 See `scripts/example_script.py`.
 
+## Licence
+
+GPL-3.0-only, the same licence as FreeShow. This app deliberately re-uses FreeShow's UI palette
+and conventions so the two sit together without a seam, which makes matching its licence the
+right call.
+
 ## Recommended IDE Setup
 
 [VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer).

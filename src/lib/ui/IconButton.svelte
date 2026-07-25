@@ -29,7 +29,6 @@
     height: 2rem;
     background: transparent;
     border: none;
-    border-radius: var(--radius-sm);
     color: var(--text-dim);
     cursor: pointer;
     transition:
@@ -38,13 +37,13 @@
   }
 
   .icon-btn:hover:not(:disabled) {
-    background: var(--surface-3);
+    background: var(--hover);
     color: var(--text);
   }
 
   .icon-btn.active {
-    background: var(--accent-soft);
-    color: var(--accent);
+    background: var(--secondary-soft);
+    color: var(--secondary);
   }
 
   .icon-btn:disabled {

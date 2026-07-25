@@ -28,17 +28,15 @@
 <style>
   .tabs {
     display: flex;
-    gap: var(--space-1);
-    background: var(--surface-2);
-    border-radius: var(--radius-sm);
-    padding: 3px;
+    background: var(--primary-darker);
   }
 
+  /* FreeShow's tab strip: flat, with a --secondary edge marking the active tab */
   .tab {
-    padding: var(--space-1) var(--space-4);
+    padding: var(--space-2) var(--space-4);
     background: transparent;
     border: none;
-    border-radius: 3px;
+    border-top: 2px solid transparent;
     color: var(--text-dim);
     font-size: 0.85rem;
     font-weight: 500;
@@ -49,11 +47,13 @@
   }
 
   .tab:hover:not(.active) {
+    background: var(--hover);
     color: var(--text);
   }
 
   .tab.active {
-    background: var(--surface-3);
+    background: var(--primary);
+    border-top-color: var(--secondary);
     color: var(--text);
   }
 </style>

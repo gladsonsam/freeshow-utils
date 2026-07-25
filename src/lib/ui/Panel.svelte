@@ -35,9 +35,8 @@
     display: flex;
     flex-direction: column;
     min-height: 0;
-    background: var(--surface-1);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
+    background: var(--primary);
+    border: 1px solid var(--line);
     overflow: hidden;
   }
 
@@ -48,15 +47,13 @@
     justify-content: space-between;
     gap: var(--space-3);
     padding: var(--space-3) var(--space-4);
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--line);
   }
 
   .panel-title {
     margin: 0;
-    font-size: 0.8rem;
+    font-size: 0.85rem;
     font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
     color: var(--text-dim);
   }
 
