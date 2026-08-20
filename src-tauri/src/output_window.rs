@@ -89,7 +89,7 @@ fn place(
     _fullscreen: bool,
 ) -> Result<Placement, String> {
     use tauri::Manager;
-    use windows::Win32::Foundation::BOOL;
+    use windows::core::BOOL;
     use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_EXCLUDED_FROM_PEEK};
 
     let window = app
