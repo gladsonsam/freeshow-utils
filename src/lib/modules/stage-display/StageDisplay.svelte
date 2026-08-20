@@ -19,10 +19,15 @@
   } from "./outputSettings";
   import {
     closeOutputWindow,
+    displayRef,
     listDisplays,
     listOpenOutputs,
+    matchDisplay,
+    moveOutputWindow,
     openOutputWindow,
-    resolveDisplay,
+    outputDisplay,
+    refLabel,
+    sameDisplay,
     shortDisplayLabel,
     type Display,
   } from "./outputWindow";
@@ -53,15 +58,35 @@
   let liveOutputs = $state<Set<string>>(new Set());
   // set when the window system refused to put the output on the chosen display
   let placementWarning = $state("");
+  /**
+   * Templates whose output this session has already opened for the display it
+   * is currently pinned to. Without it, the reconciler would fight the operator:
+   * close an auto-start output and it would spring straight back. Entries are
+   * dropped when the display goes away, so a stage display that disconnects and
+   * reconnects gets its output opened again.
+   */
+  let autoStarted = new Set<string>();
 
   // previews show real output when FreeShow is up, sample data otherwise
   let previewData = $derived(
     $stageData.connected ? $stageData : fixtureStageData($stageData.timestamp || Date.now()),
   );
 
-  const displayFor = (templateId: string) => {
-    const settings = settingsFor($outputConfig, templateId);
-    return resolveDisplay(displays, settings.displayName, settings.displayIndex);
+  /**
+   * The live display a template is pinned to, or `null` when that display is not
+   * connected right now. It deliberately does not fall back to another screen -
+   * see `matchDisplay`.
+   */
+  const displayFor = (templateId: string) =>
+    matchDisplay(displays, settingsFor($outputConfig, templateId).display);
+
+  /** the remembered choice, connected or not, for labelling and for the picker */
+  const targetFor = (templateId: string) => settingsFor($outputConfig, templateId).display;
+
+  /** a template is waiting when it has a display pinned and that display is absent */
+  const waitingFor = (templateId: string) => {
+    const target = targetFor(templateId);
+    return target && !matchDisplay(displays, target) ? refLabel(target) : "";
   };
 
   onMount(() => {
@@ -74,25 +99,44 @@
       await refresh();
       await refreshDisplays();
       await refreshOutputs();
-      await autoStartOutputs();
+      await reconcileOutputs();
       loading = false;
     })();
 
+    // Two things are re-read on a timer rather than pushed at us.
+    //
     // An output window can go away without telling us - Esc, the window manager,
-    // a crash - and it must not be able to take the gallery down with it, so the
-    // live state is re-read rather than pushed. The call is one cheap IPC round
-    // trip against a handful of windows.
-    const poll = setInterval(refreshOutputs, 1000);
+    // a crash - and it must not be able to take the gallery down with it.
+    //
+    // The set of connected displays changes on its own too, and that one matters
+    // more: a wireless stage display connects minutes after the app has started,
+    // and neither Tauri nor the platform hands us an event for it. Enumerating
+    // is a live EnumDisplayMonitors/GDK call and costs one cheap IPC round trip,
+    // so it is polled alongside the windows. Without this the display list is a
+    // snapshot taken at launch, and anything connected later is simply invisible.
+    const poll = setInterval(tick, 1000);
     return () => clearInterval(poll);
   });
 
+  async function tick() {
+    await refreshDisplays();
+    await refreshOutputs();
+    await reconcileOutputs();
+  }
+
   async function refreshDisplays() {
     try {
-      displays = await listDisplays();
+      const next = await listDisplays();
+      // replacing the array on every tick would re-render the gallery once a
+      // second and reset any open <select>; only publish real changes
+      if (!sameDisplayList(displays, next)) displays = next;
     } catch (error) {
       errorMessage = `Could not read the connected displays: ${error}`;
     }
   }
+
+  const sameDisplayList = (a: Display[], b: Display[]) =>
+    a.length === b.length && a.every((display, i) => sameDisplay(display, b[i]));
 
   /** re-read which outputs are actually up; the windows outlive this component */
   async function refreshOutputs() {
@@ -104,27 +148,61 @@
   }
 
   /**
-   * Reopen every template pinned to auto-start, on the display it was left on -
-   * this is what makes "set the output once" mean something across app
-   * restarts rather than just remembering the picker for next time it's clicked.
-   * Runs once, right after launch, before the operator has touched anything.
+   * Keep every auto-start template's output on the display it was pinned to.
+   *
+   * This is what makes "set the output once" mean something. It used to run once
+   * at launch against a single snapshot of the connected displays, which is the
+   * wrong shape for a wireless stage display: that display is never there yet
+   * when the app starts, so the output opened on whatever screen *was* there and
+   * had to be dragged across by hand every week. Running it on the poll turns
+   * "the display was missing at launch" from a permanent failure into a wait.
+   *
+   * Three cases, in order:
+   *
+   * - pinned display connected, no output up -> open it (once - see `autoStarted`)
+   * - pinned display connected, output up on the wrong screen -> move it
+   * - pinned display gone -> leave the output alone and arm the auto-start again,
+   *   so reconnecting the display puts it back
    */
-  async function autoStartOutputs() {
+  async function reconcileOutputs() {
     for (const template of templates) {
-      if (liveOutputs.has(template.id)) continue;
       const settings = settingsFor($outputConfig, template.id);
       if (!settings.autoStart) continue;
+
+      const target = displayFor(template.id);
+      if (!target) {
+        // pinned display is not connected - re-arm and wait for it
+        autoStarted.delete(template.id);
+        continue;
+      }
+
       try {
-        placementWarning =
-          (await openOutputWindow(template, {
-            display: displayFor(template.id),
-            fullscreen: settings.fullscreen,
-          })) ?? placementWarning;
+        if (!liveOutputs.has(template.id)) {
+          // the operator closing an output must stick, so open only once per
+          // appearance of the display
+          if (autoStarted.has(template.id)) continue;
+          autoStarted.add(template.id);
+          placementWarning =
+            (await openOutputWindow(template, {
+              display: target,
+              fullscreen: settings.fullscreen,
+            })) ?? placementWarning;
+          await refreshOutputs();
+          continue;
+        }
+
+        autoStarted.add(template.id);
+
+        // already up: it may have opened before the pinned display connected
+        const current = await outputDisplay(template.id, displays);
+        if (current && !sameDisplay(current, target)) {
+          placementWarning =
+            (await moveOutputWindow(template.id, target, settings.fullscreen)) ?? placementWarning;
+        }
       } catch (error) {
-        errorMessage = `Could not auto-start "${template.name}": ${error}`;
+        errorMessage = `Could not start "${template.name}" on ${refLabel(settings.display)}: ${error}`;
       }
     }
-    await refreshOutputs();
   }
 
   /**
@@ -137,15 +215,26 @@
     liveOutputs = next;
   }
 
-  function chooseDisplay(templateId: string, index: number) {
-    updateSettings(templateId, { displayIndex: index, displayName: displays[index]?.name ?? null });
+  function chooseDisplay(templateId: string, value: string) {
+    // "keep" is the placeholder for a pinned display that isn't connected right
+    // now - selecting it must not overwrite the choice with a connected one
+    if (value === "keep") return;
+    const display = displays.find((d) => String(d.index) === value);
+    if (!display) return;
+    updateSettings(templateId, { display: displayRef(display) });
+    // a new display choice is a fresh chance to auto-start on it
+    autoStarted.delete(templateId);
   }
 
   const toggleFullscreen = (templateId: string) =>
     updateSettings(templateId, { fullscreen: !settingsFor($outputConfig, templateId).fullscreen });
 
-  const toggleAutoStart = (templateId: string) =>
+  const toggleAutoStart = (templateId: string) => {
+    // re-arm, so switching it off and back on starts the output again rather
+    // than silently doing nothing because this session already opened it once
+    autoStarted.delete(templateId);
     updateSettings(templateId, { autoStart: !settingsFor($outputConfig, templateId).autoStart });
+  };
 
   async function refresh() {
     try {
@@ -250,11 +339,21 @@
   const activate = (meta: TemplateMeta) =>
     guard(async () => {
       const settings = settingsFor($outputConfig, meta.id);
+      const display = displayFor(meta.id);
+
+      // opening it anyway on some other screen is the old silent-fallback bug;
+      // say so instead, and let the reconciler move it when the display shows up
       placementWarning =
-        (await openOutputWindow(meta, {
-          display: displayFor(meta.id),
-          fullscreen: settings.fullscreen,
-        })) ?? "";
+        settings.display && !display
+          ? `${refLabel(settings.display)} is not connected. The output will open on it as soon as it is.`
+          : "";
+
+      autoStarted.add(meta.id);
+      const warning = await openOutputWindow(meta, {
+        display,
+        fullscreen: settings.fullscreen,
+      });
+      if (warning) placementWarning = warning;
       await refreshOutputs();
     });
 
@@ -262,6 +361,9 @@
     guard(async () => {
       await closeOutputWindow(meta.id);
       markClosed(meta.id);
+      // closing by hand must stick even with auto-start on, until the pinned
+      // display comes back
+      autoStarted.add(meta.id);
       placementWarning = "";
     });
 
@@ -271,6 +373,7 @@
   const deactivateAll = () =>
     guard(async () => {
       await Promise.all([...liveOutputs].map((id) => closeOutputWindow(id)));
+      for (const id of liveOutputs) autoStarted.add(id);
       liveOutputs = new Set();
       placementWarning = "";
     });
@@ -340,6 +443,7 @@
         {#each templates as template (template.id)}
           {@const live = liveOutputs.has(template.id)}
           {@const settings = settingsFor($outputConfig, template.id)}
+          {@const waiting = waitingFor(template.id)}
           <article class="card" class:live>
             <TemplatePreview html={template.html} data={previewData} />
 
@@ -349,6 +453,9 @@
                 {#if live}
                   <span class="live-dot"></span>
                   On {displayFor(template.id)?.name ?? "this display"}
+                {:else if waiting}
+                  <span class="wait-dot"></span>
+                  Waiting for {waiting}
                 {:else if formatCreated(template.created)}
                   Created {formatCreated(template.created)}
                 {/if}
@@ -358,18 +465,29 @@
             <!-- each template picks its own screen: a stage rig runs lyrics on
                  one monitor and notes on another, at the same time -->
             <div class="card-output">
+              <!-- A display that is pinned but not connected keeps its place in
+                   the list. Dropping it would silently repoint the template at
+                   whatever screen happens to be plugged in, which is how an
+                   output ends up somewhere nobody chose. -->
               <select
                 class="display-select"
-                value={String(displayFor(template.id)?.index ?? 0)}
-                onchange={(event) => chooseDisplay(template.id, Number(event.currentTarget.value))}
-                disabled={!displays.length}
-                title="Display this template outputs to"
+                class:waiting
+                value={waiting ? "keep" : String(displayFor(template.id)?.index ?? "none")}
+                onchange={(event) => chooseDisplay(template.id, event.currentTarget.value)}
+                title={waiting
+                  ? `${waiting} is not connected — the output opens on it as soon as it is`
+                  : "Display this template outputs to"}
               >
+                {#if waiting}
+                  <option value="keep">{waiting} (not connected)</option>
+                {:else if !settings.display}
+                  <option value="none">Choose a display…</option>
+                {/if}
                 {#each displays as display}
                   <option value={String(display.index)}>{shortDisplayLabel(display)}</option>
                 {/each}
-                {#if !displays.length}
-                  <option value="0">No displays detected</option>
+                {#if !displays.length && !waiting}
+                  <option value="none">No displays detected</option>
                 {/if}
               </select>
 
@@ -527,12 +645,19 @@
     color: var(--text-faint);
   }
 
-  .live-dot {
+  .live-dot,
+  .wait-dot {
     width: 0.5rem;
     height: 0.5rem;
     border-radius: 50%;
     background: var(--connected);
     flex: none;
+  }
+
+  /* pinned to a display that isn't connected yet - not an error, just not there */
+  .wait-dot {
+    background: none;
+    border: 1px solid var(--warning);
   }
 
   .card-output {
@@ -546,6 +671,10 @@
     flex: 1;
     min-width: 0;
     font-size: 0.82rem;
+  }
+
+  .display-select.waiting {
+    color: var(--warning);
   }
 
   .card-actions {

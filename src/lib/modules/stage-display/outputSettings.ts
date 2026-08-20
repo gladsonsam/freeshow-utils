@@ -1,11 +1,18 @@
 import { writable } from "svelte/store";
+import type { DisplayRef } from "./outputWindow";
 
 export type OutputSettings = {
-  /** matched by name first, index second - see resolveDisplay */
-  displayName: string | null;
-  displayIndex: number;
+  /**
+   * The chosen display, remembered in full so it can be recognised again after
+   * being disconnected and reconnected - see `matchDisplay`. `null` means "no
+   * choice made yet", which is not the same as "the chosen display is missing".
+   */
+  display: DisplayRef | null;
   fullscreen: boolean;
-  /** reopen this template's output on its saved display as soon as the app starts */
+  /**
+   * Open this template's output on its chosen display automatically - at app
+   * start if the display is already there, and otherwise the moment it appears.
+   */
   autoStart: boolean;
 };
 
@@ -30,11 +37,41 @@ const KEY = "freeshow-utils.stage-output";
 // fullscreen by default: an output window is for a stage monitor, and on Wayland
 // it is also the only way the chosen display is honoured at all
 const DEFAULTS: OutputSettings = {
-  displayName: null,
-  displayIndex: 0,
+  display: null,
   fullscreen: true,
   autoStart: false,
 };
+
+/**
+ * Settings written before a display was remembered in full carried only a name
+ * and an index. Keep both: they are still two of the signals `matchDisplay`
+ * scores on, and a saved choice shouldn't be thrown away on upgrade.
+ */
+function migrate(settings: Partial<OutputSettings> & Record<string, unknown>): OutputSettings {
+  const merged = { ...DEFAULTS, ...settings } as OutputSettings;
+  if (merged.display) return merged;
+
+  const name = settings.displayName;
+  const index = settings.displayIndex;
+
+  // the old default was a null name with index 0, which meant "nothing chosen
+  // yet" rather than "display 1" - migrating that would leave every untouched
+  // template pinned to, and waiting for, a display the operator never picked
+  if (typeof name !== "string" || !name) return merged;
+
+  return {
+    ...merged,
+    display: {
+      name,
+      index: typeof index === "number" ? index : 0,
+      // never recorded - geometry scores nothing and the name carries the match
+      width: -1,
+      height: -1,
+      x: -1,
+      y: -1,
+    },
+  };
+}
 
 const empty = (): OutputConfig => ({ fallback: { ...DEFAULTS }, byTemplate: {} });
 
@@ -51,16 +88,16 @@ function load(): OutputConfig {
     // the previous shape was one flat OutputSettings for the whole module; keep
     // that choice as the fallback rather than dropping it
     if (!("byTemplate" in parsed)) {
-      return { fallback: { ...DEFAULTS, ...parsed }, byTemplate: {} };
+      return { fallback: migrate(parsed), byTemplate: {} };
     }
 
     const byTemplate: Record<string, OutputSettings> = {};
     for (const [id, settings] of Object.entries(parsed.byTemplate ?? {})) {
-      byTemplate[id] = { ...DEFAULTS, ...(settings as Partial<OutputSettings>) };
+      byTemplate[id] = migrate((settings ?? {}) as Record<string, unknown>);
     }
 
     return {
-      fallback: { ...DEFAULTS, ...(parsed.fallback ?? {}) },
+      fallback: migrate(parsed.fallback ?? {}),
       byTemplate,
     };
   } catch {
