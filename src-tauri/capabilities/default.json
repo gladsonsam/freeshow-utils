@@ -15,6 +15,7 @@
     "core:window:allow-current-monitor",
     "core:window:allow-primary-monitor",
     "core:window:allow-set-position",
+    "core:window:allow-show",
     "core:window:allow-set-size",
     "core:window:allow-outer-position",
     "core:webview:allow-create-webview-window",

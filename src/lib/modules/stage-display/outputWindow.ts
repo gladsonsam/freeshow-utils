@@ -341,7 +341,7 @@ type Placement = {
  */
 export async function openOutputWindow(
   template: TemplateMeta,
-  options: { display?: Display | null; fullscreen?: boolean } = {},
+  options: { display?: Display | null; fullscreen?: boolean; focus?: boolean } = {},
 ): Promise<string | null> {
   const label = outputLabel(template.id);
   const fullscreen = options.fullscreen ?? false;
@@ -357,18 +357,23 @@ export async function openOutputWindow(
   const window = new WebviewWindow(label, {
     url: `/output/?template=${encodeURIComponent(template.id)}`,
     title: `${template.name} — Stage Output`,
-    // a positioning *request*: honoured on Windows, macOS and X11, dropped on
-    // Wayland, which is why placement is re-applied below
+    // A rough first guess only - `fillDisplay` below is what actually places the
+    // window. These are logical units, and the runtime resolves them against
+    // whichever monitor it thinks the window is being born on, which is exactly
+    // the guess that goes wrong on a mixed-DPI desktop.
     x: display?.x,
     y: display?.y,
     width: display?.width ?? 1280,
     height: display?.height ?? 720,
+    // Born hidden, shown once it is on the right screen. Otherwise the first
+    // frame lands wherever the guess above put it - which on a mixed-DPI desktop
+    // is the operator's own monitor, mid-service.
+    visible: false,
     // fullscreen is applied after creation instead, so it can be aimed at a
     // specific monitor rather than whichever one the window happened to open on
     fullscreen: false,
     decorations: false,
     resizable: true,
-    focus: true,
     // this is a stage monitor mirroring lyrics, not something the operator
     // alt-tabs to - each one showing up as its own taskbar entry just spams
     // the taskbar, especially with several running at once
@@ -383,7 +388,41 @@ export async function openOutputWindow(
     window.once("tauri://error", (event) => reject(new Error(String(event.payload))));
   });
 
+  if (display) await fillDisplay(window, display);
+  await window.show();
+  if (options.focus ?? true) await window.setFocus();
+
   return applyPlacement(window, label, display, fullscreen);
+}
+
+/**
+ * Put a window exactly over one display, in device pixels.
+ *
+ * This is the only correct way to aim a window at a specific monitor, and the
+ * reason is worth spelling out, because the obvious way looks like it works.
+ *
+ * The window builder takes *logical* units. To place them it walks the monitors,
+ * converts the requested point using each monitor's own scale factor, and keeps
+ * the first monitor whose rect contains the result. Give it a 1080p stage TV at
+ * 150% scaling sitting to the right of a 1080p booth monitor at 100%, and the
+ * numbers work out like this: the TV's logical origin is 1920 / 1.5 = 1280,
+ * which the booth monitor - tried first, and unscaled - happily claims, because
+ * 1280 is inside 0..1920. The size goes the same way: the TV's logical size is
+ * 1280x720, and applied at the booth monitor's scale that is 1280x720 device
+ * pixels on a 1920x1080 screen.
+ *
+ * So the output opens on the wrong monitor at two-thirds size, and every number
+ * involved was one the app itself asked for. Device pixels have none of this
+ * ambiguity: they are one coordinate space shared by every monitor.
+ *
+ * Position first, then size. Crossing a DPI boundary makes Windows rescale the
+ * window to suit the monitor it arrived on, so a size set beforehand is a size
+ * that gets overwritten on the way.
+ */
+async function fillDisplay(window: WebviewWindow, display: Display): Promise<void> {
+  const { PhysicalPosition, PhysicalSize } = await import("@tauri-apps/api/dpi");
+  await window.setPosition(new PhysicalPosition(display.physical.x, display.physical.y));
+  await window.setSize(new PhysicalSize(display.physical.width, display.physical.height));
 }
 
 /**
@@ -431,13 +470,8 @@ export async function moveOutputWindow(
   const window = await WebviewWindow.getByLabel(label);
   if (!window) return null;
 
-  const { PhysicalPosition, PhysicalSize } = await import("@tauri-apps/api/dpi");
-
   if (await window.isFullscreen()) await window.setFullscreen(false);
-  // physical: a logical size would be scaled by the monitor the window is
-  // leaving, not the one it is arriving on, and land the wrong size
-  await window.setSize(new PhysicalSize(display.physical.width, display.physical.height));
-  await window.setPosition(new PhysicalPosition(display.physical.x, display.physical.y));
+  await fillDisplay(window, display);
 
   return applyPlacement(window, label, display, fullscreen);
 }
