@@ -7,6 +7,7 @@
   import Icon from "$lib/ui/Icon.svelte";
   import IconButton from "$lib/ui/IconButton.svelte";
   import { stageData } from "$lib/core/stageState";
+  import DisplayMap from "./DisplayMap.svelte";
   import TemplateEditor from "./TemplateEditor.svelte";
   import TemplatePreview from "./TemplatePreview.svelte";
   import { fixtureStageData } from "./fixture";
@@ -26,8 +27,10 @@
     moveOutputWindow,
     openOutputWindow,
     outputDisplay,
+    refIsStale,
     refLabel,
     sameDisplay,
+    sameDisplayList,
     shortDisplayLabel,
     type Display,
   } from "./outputWindow";
@@ -54,6 +57,8 @@
   let loading = $state(true);
   let displays = $state<Display[]>([]);
   let confirmRestore = $state(false);
+  /** the template whose display picker is open, if any */
+  let picking = $state<TemplateMeta | null>(null);
   // template ids with an output window up - several at once on a multi-monitor rig
   let liveOutputs = $state<Set<string>>(new Set());
   // set when the window system refused to put the output on the chosen display
@@ -120,6 +125,7 @@
 
   async function tick() {
     await refreshDisplays();
+    upgradeRefs();
     await refreshOutputs();
     await reconcileOutputs();
   }
@@ -134,9 +140,6 @@
       errorMessage = `Could not read the connected displays: ${error}`;
     }
   }
-
-  const sameDisplayList = (a: Display[], b: Display[]) =>
-    a.length === b.length && a.every((display, i) => sameDisplay(display, b[i]));
 
   /** re-read which outputs are actually up; the windows outlive this component */
   async function refreshOutputs() {
@@ -215,15 +218,30 @@
     liveOutputs = next;
   }
 
-  function chooseDisplay(templateId: string, value: string) {
-    // "keep" is the placeholder for a pinned display that isn't connected right
-    // now - selecting it must not overwrite the choice with a connected one
-    if (value === "keep") return;
-    const display = displays.find((d) => String(d.index) === value);
-    if (!display) return;
+  function chooseDisplay(templateId: string, display: Display) {
     updateSettings(templateId, { display: displayRef(display) });
     // a new display choice is a fresh chance to auto-start on it
     autoStarted.delete(templateId);
+    picking = null;
+  }
+
+  /**
+   * Rewrite a remembered choice that predates knowing the monitor's device path,
+   * now that its display is in front of us and we can read one.
+   *
+   * Without this, a choice made before the app could ask Windows for real
+   * monitor names goes on resting on resolution and desktop position alone -
+   * which is exactly what stops holding the day someone rearranges the screens.
+   * One quiet write, the first time the display is seen again.
+   */
+  function upgradeRefs() {
+    for (const template of templates) {
+      const ref = targetFor(template.id);
+      const live = displayFor(template.id);
+      if (ref && live && refIsStale(ref, live)) {
+        updateSettings(template.id, { display: displayRef(live) });
+      }
+    }
   }
 
   const toggleFullscreen = (templateId: string) =>
@@ -444,6 +462,7 @@
           {@const live = liveOutputs.has(template.id)}
           {@const settings = settingsFor($outputConfig, template.id)}
           {@const waiting = waitingFor(template.id)}
+          {@const chosen = displayFor(template.id)}
           <article class="card" class:live>
             <TemplatePreview html={template.html} data={previewData} />
 
@@ -452,7 +471,7 @@
               <p class="card-meta">
                 {#if live}
                   <span class="live-dot"></span>
-                  On {displayFor(template.id)?.name ?? "this display"}
+                  On {chosen?.name ?? "this display"}
                 {:else if waiting}
                   <span class="wait-dot"></span>
                   Waiting for {waiting}
@@ -465,31 +484,30 @@
             <!-- each template picks its own screen: a stage rig runs lyrics on
                  one monitor and notes on another, at the same time -->
             <div class="card-output">
-              <!-- A display that is pinned but not connected keeps its place in
-                   the list. Dropping it would silently repoint the template at
+              <!-- A display that is pinned but not connected keeps its place
+                   here. Dropping it would silently repoint the template at
                    whatever screen happens to be plugged in, which is how an
                    output ends up somewhere nobody chose. -->
-              <select
-                class="display-select"
+              <button
+                type="button"
+                class="display-button"
                 class:waiting
-                value={waiting ? "keep" : String(displayFor(template.id)?.index ?? "none")}
-                onchange={(event) => chooseDisplay(template.id, event.currentTarget.value)}
+                onclick={() => (picking = template)}
                 title={waiting
                   ? `${waiting} is not connected — the output opens on it as soon as it is`
-                  : "Display this template outputs to"}
+                  : "Choose the display this template outputs to"}
               >
                 {#if waiting}
-                  <option value="keep">{waiting} (not connected)</option>
-                {:else if !settings.display}
-                  <option value="none">Choose a display…</option>
+                  {waiting} (not connected)
+                {:else if chosen}
+                  <span class="display-ordinal">{chosen.index + 1}</span>
+                  {shortDisplayLabel(chosen)}
+                {:else if displays.length}
+                  Choose a display…
+                {:else}
+                  No displays detected
                 {/if}
-                {#each displays as display}
-                  <option value={String(display.index)}>{shortDisplayLabel(display)}</option>
-                {/each}
-                {#if !displays.length && !waiting}
-                  <option value="none">No displays detected</option>
-                {/if}
-              </select>
+              </button>
 
               <IconButton
                 title={settings.fullscreen
@@ -554,6 +572,33 @@
   {#snippet footer()}
     <Button variant="primary" onclick={restore}>Restore</Button>
     <Button variant="ghost" onclick={() => (confirmRestore = false)}>Cancel</Button>
+  {/snippet}
+</Modal>
+
+<!-- The picker is a map rather than a list: see DisplayMap. It lives in a modal
+     because a to-scale desktop arrangement needs more room than a card has. -->
+<Modal
+  open={!!picking}
+  title={picking ? `Output display — ${picking.name}` : "Output display"}
+  onClose={() => (picking = null)}
+  width="640px"
+>
+  {#if picking}
+    {@const templateId = picking.id}
+    <p class="pick-hint">
+      Click the screen this template should output to. The screens are drawn where they sit on
+      the desktop, at their real sizes.
+    </p>
+    <DisplayMap
+      {displays}
+      selected={displayFor(templateId)}
+      missing={waitingFor(templateId) ? targetFor(templateId) : null}
+      onchoose={(display) => chooseDisplay(templateId, display)}
+    />
+  {/if}
+  {#snippet footer()}
+    <Button variant="ghost" onclick={refreshDisplays}>Re-scan</Button>
+    <Button variant="ghost" onclick={() => (picking = null)}>Close</Button>
   {/snippet}
 </Modal>
 
@@ -667,14 +712,58 @@
     padding: var(--space-3) var(--space-4) 0;
   }
 
-  .display-select {
+  .display-button {
     flex: 1;
     min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
     font-size: 0.82rem;
+    padding: var(--space-2) var(--space-3);
+    background: var(--primary-darker);
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    color: var(--text);
+    cursor: pointer;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    transition:
+      background var(--transition),
+      border-color var(--transition);
   }
 
-  .display-select.waiting {
+  .display-button:hover {
+    background: var(--primary-lighter);
+  }
+
+  .display-button:focus-visible {
+    outline: none;
+    border-color: var(--secondary);
+  }
+
+  .display-button.waiting {
     color: var(--warning);
+  }
+
+  /* the same number the map draws on the screen, so the two read as one thing */
+  .display-ordinal {
+    flex: none;
+    display: inline-grid;
+    place-items: center;
+    width: 17px;
+    height: 17px;
+    border-radius: var(--radius);
+    background: var(--focus);
+    color: var(--text-dim);
+    font-size: 0.7rem;
+    font-weight: 700;
+  }
+
+  .pick-hint {
+    margin: 0 0 var(--space-4);
+    color: var(--text-dim);
+    font-size: 0.85rem;
   }
 
   .card-actions {

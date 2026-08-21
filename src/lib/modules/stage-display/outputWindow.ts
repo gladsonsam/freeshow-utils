@@ -8,12 +8,29 @@ export const outputLabel = (id: string) => `output-${id}`;
 
 export type Display = {
   index: number;
+  /** what to put in front of the operator: the monitor's own name, or "Display 2" */
   name: string;
+  /**
+   * What the monitor calls itself, when the platform knows. `null` when all we
+   * were handed is a slot (`\\.\DISPLAY2`) or an X11 handle (`0x403D`), which
+   * name a position in a list rather than a screen.
+   */
+  friendly: string | null;
+  /**
+   * Unique and stable per physical monitor - Windows' monitor device path. This
+   * is the one field worth remembering: everything else about a display can
+   * change between one connection and the next.
+   */
+  identity: string | null;
+  /** how it is attached: "wireless", "hdmi", "internal"… `null` where unknown */
+  connection: string | null;
   /** logical (scale-adjusted) geometry, which is what window options expect */
   x: number;
   y: number;
   width: number;
   height: number;
+  /** 1 at 100% Windows scaling, 1.5 at 150%, and so on */
+  scale: number;
   primary: boolean;
   /**
    * Raw device pixels, kept alongside the logical geometry because the two are
@@ -25,36 +42,101 @@ export type Display = {
   physical: { x: number; y: number; width: number; height: number };
 };
 
-/** "Display 1 — 1920 × 1080" */
-export function displayLabel(display: Display): string {
-  return `${display.name} — ${display.width} × ${display.height}${display.primary ? " (primary)" : ""}`;
+/**
+ * The resolution to *show* is the native one.
+ *
+ * The logical size is the native size divided by the monitor's scale factor, so
+ * a 1080p screen at 150% scaling reads as "1280 × 720" - which is not a number
+ * anybody recognises their own TV by, and makes a real 720p screen and a scaled
+ * 1080p one look like the same thing. Window placement still uses the logical
+ * rect; only the label uses this.
+ */
+export const nativeSize = (display: Display) =>
+  `${display.physical.width} × ${display.physical.height}`;
+
+/** "150%", or "" when the monitor is unscaled and there is nothing to explain */
+export const scaleNote = (display: Display) =>
+  display.scale && display.scale !== 1 ? `${Math.round(display.scale * 100)}%` : "";
+
+/** the short words that tell two otherwise identical screens apart */
+export function displayTags(display: Display): string[] {
+  const tags: string[] = [];
+  if (display.primary) tags.push("primary");
+  if (display.connection === "wireless") tags.push("wireless");
+  else if (display.connection === "virtual") tags.push("virtual");
+  else if (display.connection === "internal") tags.push("built-in");
+  return tags;
 }
 
-/** "Display 1 · 1920×1080", for the cramped per-template picker */
+/** "Living Room TV — 1920 × 1080 (wireless)" */
+export function displayLabel(display: Display): string {
+  const tags = displayTags(display);
+  return `${display.name} — ${nativeSize(display)}${tags.length ? ` (${tags.join(", ")})` : ""}`;
+}
+
+/** "Living Room TV · 1920×1080", for the cramped per-template picker */
 export function shortDisplayLabel(display: Display): string {
-  return `${display.name} · ${display.width}×${display.height}`;
+  return `${display.name} · ${display.physical.width}×${display.physical.height}`;
 }
 
 /**
  * Platforms hand back wildly different monitor names - a real model name on
- * some, a bare handle like "0x403D" on X11/Wayland. Anything that isn't
- * recognisably a name gets a plain ordinal instead.
+ * some, a bare handle like "0x403D" on X11/Wayland, and on Windows the GDI slot
+ * the monitor happens to occupy (`\\.\DISPLAY2`). Only a real name is worth
+ * showing; anything else is an ordinal wearing a costume.
  */
-function readableName(name: string | null, index: number): string {
+function claimedName(name: string | null): string | null {
   const trimmed = (name || "").trim();
-  const isHandle = !trimmed || /^0x[0-9a-f]+$/i.test(trimmed) || /^\d+$/.test(trimmed);
-  return isHandle ? `Display ${index + 1}` : trimmed;
+  if (!trimmed) return null;
+  if (/^0x[0-9a-f]+$/i.test(trimmed)) return null;
+  if (/^\d+$/.test(trimmed)) return null;
+  // \\.\DISPLAY2 - a slot on the graphics adapter, reassigned freely between
+  // one connection and the next
+  if (/^\\\\[.?]\\DISPLAY\d+$/i.test(trimmed)) return null;
+  return trimmed;
 }
 
-function toDisplay(monitor: Monitor, index: number, primary: Monitor | null): Display {
+/** What the backend knows about a monitor that the window runtime does not. */
+type DisplayName = {
+  device: string;
+  friendly: string | null;
+  path: string | null;
+  connection: string | null;
+};
+
+/**
+ * Names keyed by the platform monitor name. Empty when the platform has nothing
+ * extra to add, or when the backend predates the command - a picker with plain
+ * ordinals is a lesser thing, not a broken one.
+ */
+async function describeDisplays(): Promise<Map<string, DisplayName>> {
+  try {
+    const described = await invoke<DisplayName[]>("describe_displays");
+    return new Map(described.map((entry) => [entry.device, entry]));
+  } catch {
+    return new Map();
+  }
+}
+
+function toDisplay(
+  monitor: Monitor,
+  index: number,
+  primary: Monitor | null,
+  described: DisplayName | undefined,
+): Display {
   const scale = monitor.scaleFactor || 1;
+  const friendly = described?.friendly?.trim() || claimedName(monitor.name);
   return {
     index,
-    name: readableName(monitor.name, index),
+    name: friendly ?? `Display ${index + 1}`,
+    friendly,
+    identity: described?.path || null,
+    connection: described?.connection || null,
     x: Math.round(monitor.position.x / scale),
     y: Math.round(monitor.position.y / scale),
     width: Math.round(monitor.size.width / scale),
     height: Math.round(monitor.size.height / scale),
+    scale,
     // a multi-monitor layout doesn't have to put anything at the origin, so ask
     // the platform which display is primary rather than guessing from position
     primary:
@@ -71,41 +153,80 @@ function toDisplay(monitor: Monitor, index: number, primary: Monitor | null): Di
 }
 
 export async function listDisplays(): Promise<Display[]> {
-  const [monitors, primary] = await Promise.all([
+  const [monitors, primary, described] = await Promise.all([
     availableMonitors(),
     primaryMonitor().catch(() => null),
+    describeDisplays(),
   ]);
-  return monitors.map((monitor, index) => toDisplay(monitor, index, primary));
+  return monitors.map((monitor, index) =>
+    toDisplay(monitor, index, primary, described.get(monitor.name ?? "")),
+  );
 }
 
 /**
  * Everything remembered about a chosen display, so it can be found again after
  * it has been unplugged and reconnected.
  *
- * One field is never enough. On Windows a monitor's `name` is its GDI slot
- * (`\.\DISPLAY2`), and a wireless display takes whichever slot happens to be
- * free, so both the name and the index can differ between one connection and
- * the next. Resolution and desktop position survive a reconnect - Windows
- * remembers the arrangement per display - so they carry the identity when the
- * name has moved.
+ * One field is never enough. On Windows the runtime's `name` for a monitor is
+ * only the GDI slot it occupies (`\\.\DISPLAY2`), and a wireless display takes
+ * whichever slot happens to be free, so both that and the index differ between
+ * one connection and the next. `identity` - the monitor's own device path - is
+ * the field that actually survives, when the platform gives us one; resolution
+ * and desktop position carry the identity when it does not.
  */
 export type DisplayRef = {
+  /** unique per physical monitor; absent on a choice made before we asked for it */
+  identity?: string | null;
+  /** the monitor's own name, when it has one - not the slot */
+  friendly?: string | null;
   name: string | null;
   index: number;
+  /** logical, matching `Display.width`/`height` */
   width: number;
   height: number;
   x: number;
   y: number;
+  /** native resolution, so a display that is away can still be named honestly */
+  native?: { width: number; height: number } | null;
+  connection?: string | null;
 };
 
 export const displayRef = (display: Display): DisplayRef => ({
+  identity: display.identity,
+  friendly: display.friendly,
   name: display.name,
   index: display.index,
   width: display.width,
   height: display.height,
   x: display.x,
   y: display.y,
+  native: { width: display.physical.width, height: display.physical.height },
+  connection: display.connection,
 });
+
+/**
+ * Whether a remembered choice predates the richer identity above and would be
+ * worth rewriting once its display is in front of us again. Nothing is broken
+ * without it; the match just rests on geometry alone.
+ */
+export const refIsStale = (ref: DisplayRef | null, display: Display | null) =>
+  !!ref && !!display && !!display.identity && ref.identity !== display.identity;
+
+/**
+ * Whether two snapshots describe the same set of screens *as far as anything on
+ * screen is concerned*. Geometry alone isn't it: the monitor names arrive from a
+ * second call that can come back empty on one poll and populated on the next,
+ * and a picker that never notices would keep showing ordinals forever.
+ */
+export const sameDisplayList = (a: Display[], b: Display[]) =>
+  a.length === b.length &&
+  a.every(
+    (display, index) =>
+      sameDisplay(display, b[index]) &&
+      display.name === b[index].name &&
+      display.identity === b[index].identity &&
+      display.connection === b[index].connection,
+  );
 
 export const sameDisplay = (a: Display | null, b: Display | null) =>
   !!a &&
@@ -118,20 +239,27 @@ export const sameDisplay = (a: Display | null, b: Display | null) =>
 /**
  * How strongly a live display looks like the remembered one.
  *
- * Weighted so that a name match alone is enough, and so is resolution together
- * with the same place on the desktop - but nothing weaker. In particular
- * resolution plus index is deliberately *not* enough: a stage TV and a booth
- * monitor are very often both 1920x1080, and a monitor that lands on the index
- * the TV used to hold would otherwise be adopted as the TV. Sending the output
- * to the wrong screen is the exact failure this exists to prevent, so a missed
- * match (which shows as "waiting", and is one click to re-pick) is the far
- * cheaper mistake.
+ * Below the device path, no single signal is trusted alone. The monitor's own
+ * name plus anything else clears the bar, and so does resolution together with
+ * the same place on the desktop - but nothing weaker. In particular resolution
+ * plus index is deliberately *not* enough: a stage TV and a booth monitor are
+ * very often both 1920x1080, and a monitor that lands on the index the TV used
+ * to hold would otherwise be adopted as the TV. Sending the output to the wrong
+ * screen is the exact failure this exists to prevent, so a missed match (which
+ * shows as "waiting", and is one click to re-pick) is the far cheaper mistake.
  */
 const MATCH_THRESHOLD = 4;
 
 function matchScore(display: Display, ref: DisplayRef): number {
+  // A monitor that told us its own device path is identified by it and nothing
+  // else needs to agree: it is unique per panel, and it is the same string after
+  // the display has been off all week.
+  if (ref.identity && display.identity === ref.identity) return 6;
+
   let score = 0;
-  if (ref.name && display.name === ref.name) score += 4;
+  // the monitor's own name - worth a lot, but not decisive on its own, because
+  // two of the same model report the same name
+  if (ref.friendly && display.friendly === ref.friendly) score += 3;
   if (display.width === ref.width && display.height === ref.height) score += 2;
   if (display.x === ref.x && display.y === ref.y) score += 2;
   // a tiebreak only - never enough on its own to lift a weaker signal over the line
@@ -167,9 +295,11 @@ export function matchDisplay(displays: Display[], ref: DisplayRef | null): Displ
 export function refLabel(ref: DisplayRef | null): string {
   if (!ref) return "the chosen display";
   const name = ref.name || `Display ${ref.index + 1}`;
+  // native when we recorded it; the logical rect is all an older choice has
+  const size = ref.native ?? { width: ref.width, height: ref.height };
   // geometry is -1 on a choice migrated from settings that never recorded it
-  if (ref.width < 0 || ref.height < 0) return name;
-  return `${name} · ${ref.width}×${ref.height}`;
+  if (size.width < 0 || size.height < 0) return name;
+  return `${name} · ${size.width}×${size.height}`;
 }
 
 /**

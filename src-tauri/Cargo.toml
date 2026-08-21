@@ -37,5 +37,11 @@ gtk = "0.18"
 # tauri::WebviewWindow::hwnd() is the same type cargo resolves here - see
 # src/output_window.rs.
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Dwm"] }
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Dwm",
+    # QueryDisplayConfig, for the monitor names the window runtime does not expose
+    # - see src/displays.rs
+    "Win32_Devices_Display",
+] }
 

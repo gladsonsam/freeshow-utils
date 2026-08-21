@@ -1,3 +1,4 @@
+mod displays;
 mod output_window;
 mod python;
 mod settings;
@@ -26,6 +27,7 @@ pub fn run() {
             templates::write_templates_readme,
             templates::templates_folder,
             output_window::place_output_window,
+            displays::describe_displays,
             settings::get_close_to_tray,
             settings::set_close_to_tray,
         ])
