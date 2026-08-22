@@ -259,6 +259,20 @@ function keyFromMetadata(show: Show): DetectedKey | null {
 }
 
 /**
+ * Name a key the way the song's own chords spell it.
+ *
+ * FreeShow transposes by respelling mechanically - sharps on the way up, flats
+ * on the way down - so a song moved up from D is written D# G# A#, not Eb Ab Bb.
+ * Calling that key "Eb" would be textbook-correct and would disagree with every
+ * chord on the stage screen. The pitch is what the arithmetic uses; the label is
+ * only ever for the musician reading it, so it follows what they can see.
+ */
+function writtenKeyName(chord: ParsedChord, minor: boolean): string {
+  const root = chord.root.replace("♯", "#").replace("♭", "b");
+  return root.charAt(0).toUpperCase() + root.slice(1) + (minor ? "m" : "");
+}
+
+/**
  * Work out what key a song is in from its chords.
  *
  * The heuristic is the one a musician uses by eye: songs overwhelmingly begin
@@ -282,10 +296,11 @@ function keyFromChords(show: Show): DetectedKey | null {
   const last = pitched[pitched.length - 1];
 
   if (first.pitch === last.pitch) {
+    const minor = isMinorQuality(first.chord.quality);
     return {
       pitch: first.pitch,
-      minor: isMinorQuality(first.chord.quality),
-      label: keyName(first.pitch, isMinorQuality(first.chord.quality)),
+      minor,
+      label: writtenKeyName(first.chord, minor),
       source: "chords",
       confident: true,
     };
@@ -308,7 +323,7 @@ function keyFromChords(show: Show): DetectedKey | null {
   return {
     pitch: best.pitch,
     minor,
-    label: keyName(best.pitch, minor),
+    label: writtenKeyName(best.chord, minor),
     source: "chords",
     confident: false,
   };

@@ -7,7 +7,6 @@
   import {
     allKeys,
     keyName,
-    keyPrefersFlats,
     parseChord,
     pitchClass,
     semitoneDelta,
@@ -57,12 +56,18 @@
    * transposition. It exists because key detection is sometimes a guess, and a
    * musician can tell at a glance whether "G D Em C" turning into "A E F#m D" is
    * what they meant, which is a far better check than trusting the label.
+   *
+   * The spelling deliberately follows FreeShow's rule rather than the key
+   * signature: measured against a real show, it spells with sharps going up and
+   * flats coming down, whatever key that lands in - D G A F#m up a semitone
+   * becomes D# G# A# Gm, not Eb Ab Bb Gm. Spelling this "properly" would print a
+   * preview that disagrees with the chords the band is about to see.
    */
   function preview(pitch: number): { from: string; to: string }[] {
     if (!target || !currentKey) return [];
 
     const steps = semitoneDelta(currentKey.pitch, pitch);
-    const flats = keyPrefersFlats(pitch, minor);
+    const flats = steps < 0;
 
     const seen = new Set<string>();
     const chords: { from: string; to: string }[] = [];
