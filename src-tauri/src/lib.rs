@@ -1,3 +1,4 @@
+mod control;
 mod displays;
 mod output_window;
 mod python;
@@ -30,12 +31,16 @@ pub fn run() {
             displays::describe_displays,
             settings::get_close_to_tray,
             settings::set_close_to_tray,
+            control::start_control_server,
+            control::stop_control_server,
+            control::set_control_state,
         ])
         .setup(|app| {
             use tauri::Manager;
 
             let handle = app.handle().clone();
             app.manage(settings::load(&handle));
+            app.manage(control::ControlState::default());
             build_tray(&handle)?;
             Ok(())
         })

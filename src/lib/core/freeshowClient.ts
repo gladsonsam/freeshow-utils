@@ -16,13 +16,31 @@ const API_TIMEOUT_MS = 10_000;
 type Pending = { resolve: (data: any) => void; settled: boolean };
 
 /**
+ * The complete set of FreeShow actions this app is allowed to send that change
+ * anything. Everything else goes through `request`, which is `get_*` only.
+ *
+ * This app was read-only for its whole life before transposing arrived, and the
+ * reason was never squeamishness - it runs on a machine driving a live service,
+ * where a stray `next_slide` is a visible mistake in front of a congregation.
+ * Transposing has to write, so the rule became "writes are a short enumerated
+ * list" rather than "no writes": an action absent from this list cannot be sent
+ * by any module, however it was asked for - including over the control surface,
+ * where the caller is a Stream Deck somewhere on the network.
+ *
+ * Adding to this list is a deliberate act. Think about what it means for someone
+ * mid-service before you do.
+ */
+export const WRITE_ACTIONS = new Set(["transpose_show_up", "transpose_show_down"]);
+
+/**
  * Owns both connections to FreeShow:
  *  - the Stage server (default :5511), a push feed mirroring the live output
  *  - the Companion API (default :5505), plain request/response, the only place
  *    project/playlist data is reachable at all
  *
- * Read-only by design: we subscribe and issue `get_*` actions, never anything
- * that would control or mutate FreeShow.
+ * Reading is unrestricted: we subscribe to the feed and issue `get_*` actions
+ * freely. Writing is not - it goes through `command`, which will only send an
+ * action named in `WRITE_ACTIONS`.
  */
 export class FreeShowClient {
   readonly status: Writable<ConnectionStatus> = writable("disconnected");
@@ -155,6 +173,32 @@ export class FreeShowClient {
 
       socket.emit("data", JSON.stringify({ action, ...(data || {}) }));
     });
+  }
+
+  /**
+   * Send an action that changes FreeShow.
+   *
+   * Deliberately not part of `request`: these are the calls that edit a real
+   * show on a machine running a real service, and they should be impossible to
+   * reach for by accident while looking for a getter. The action must be in
+   * `WRITE_ACTIONS`.
+   *
+   * FreeShow acknowledges these by acting on them, not by replying, so there is
+   * nothing to await beyond the socket accepting the frame - a caller that needs
+   * to know it worked must read the show back and look. `transposeBy` does.
+   */
+  command(action: string, data?: Record<string, unknown>): { ok: boolean; error: string } {
+    if (!WRITE_ACTIONS.has(action)) {
+      return { ok: false, error: `"${action}" is not an action this app is allowed to send.` };
+    }
+
+    const socket = this.apiSocket;
+    if (!socket?.connected) {
+      return { ok: false, error: "Not connected to FreeShow." };
+    }
+
+    socket.emit("data", JSON.stringify({ action, ...(data || {}) }));
+    return { ok: true, error: "" };
   }
 
   async fetchProjects() {

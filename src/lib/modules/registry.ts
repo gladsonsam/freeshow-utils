@@ -1,6 +1,7 @@
 import type { Component } from "svelte";
 import StageDisplay from "./stage-display/StageDisplay.svelte";
 import ShowProcessor from "./show-processor/ShowProcessor.svelte";
+import KeyChanger from "./key-changer/KeyChanger.svelte";
 
 export type AppModule = {
   id: string;
@@ -34,6 +35,13 @@ export const appModules: AppModule[] = [
     icon: "📝",
     description: "Reshape show text with your own Python scripts — reformat, translate, clean up.",
     component: ShowProcessor,
+  },
+  {
+    id: "key-changer",
+    name: "Key Changer",
+    icon: "🎹",
+    description: "Put the song on output into any key, from here or from a Stream Deck.",
+    component: KeyChanger,
   },
 ];
 
