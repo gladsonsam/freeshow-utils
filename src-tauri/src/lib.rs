@@ -7,14 +7,31 @@ mod templates;
 
 use std::sync::atomic::Ordering;
 
+/// Passed to the app by the login item it registers for itself, so that a launch
+/// the OS did can be told apart from one the operator did.
+const AUTOSTART_FLAG: &str = "--minimized";
+
+fn launched_by_login() -> bool {
+    std::env::args().any(|argument| argument == AUTOSTART_FLAG)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // First, per the plugin's own instructions. A second copy of the app
+        // would fight the first for the control surface's port and lose, so a
+        // relaunch while the original sits in the tray just raises that window.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            show_main(app);
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        // The login item is registered with a flag the app can see, so
+        // "start minimised" can apply to a launch the OS did without also
+        // swallowing the window when the operator opens the app themselves.
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            None,
+            Some(vec![AUTOSTART_FLAG]),
         ))
         .invoke_handler(tauri::generate_handler![
             python::execute_python_script,
@@ -31,17 +48,40 @@ pub fn run() {
             displays::describe_displays,
             settings::get_close_to_tray,
             settings::set_close_to_tray,
+            settings::get_start_minimized,
+            settings::set_start_minimized,
             control::start_control_server,
             control::stop_control_server,
             control::set_control_state,
         ])
         .setup(|app| {
             use tauri::Manager;
+            use tauri_plugin_autostart::ManagerExt;
 
             let handle = app.handle().clone();
-            app.manage(settings::load(&handle));
+            let settings = settings::load(&handle);
+            let stay_hidden =
+                launched_by_login() && settings.start_minimized.load(Ordering::Relaxed);
+            app.manage(settings);
             app.manage(control::ControlState::default());
             build_tray(&handle)?;
+
+            // Rewrite an existing login item so that it carries the flag above.
+            // Earlier versions registered it without one, and without it a
+            // login launch cannot be told apart from a deliberate one.
+            let autostart = handle.autolaunch();
+            if autostart.is_enabled().unwrap_or(false) {
+                let _ = autostart.disable();
+                let _ = autostart.enable();
+            }
+
+            // The window is created hidden (see tauri.conf.json) and shown here
+            // rather than created visible and hidden a moment later: hiding it
+            // after the fact flashes it onto the screen first.
+            if !stay_hidden {
+                show_main(&handle);
+            }
+
             Ok(())
         })
         .on_window_event(|window, event| {

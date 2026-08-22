@@ -34,6 +34,10 @@ For the highlight: poll `/state/key-changer` into a Companion variable and add a
 it to each button's own key. The port listens on the whole network and has no password, the same as
 FreeShow's own — keep it off the open internet.
 
+If turning the control on reports that the port is already in use, something else on that machine
+holds it. The usual suspect is FreeShow itself, if the port was changed to one of the ones it uses
+(`5505`, `5510`, `5511`, `5513`+); `5512` is the default because it is the gap between them.
+
 ## Writing a template
 
 ```html

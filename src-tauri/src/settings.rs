@@ -1,8 +1,9 @@
-//! The one app-wide preference that has to be readable from a window-close
-//! handler: whether closing the main window should drop it to the tray or quit
-//! for real. Kept as its own tiny JSON file rather than pulled into the
-//! template storage, since it has nothing to do with templates and is read on
-//! a different thread (the window event callback) than any command runs on.
+//! The app-wide preferences that have to be readable outside a command: whether
+//! closing the main window drops it to the tray or quits for real (read from the
+//! window-close handler) and whether a login launch should stay in the tray
+//! (read during setup, before any webview exists to ask). Kept as their own tiny
+//! JSON file rather than pulled into the template storage, since neither has
+//! anything to do with templates.
 
 use std::fs;
 use std::path::PathBuf;
@@ -15,11 +16,16 @@ use tauri::{AppHandle, Manager};
 /// command/IPC machinery - it needs the current value synchronously.
 pub struct AppSettingsState {
     pub close_to_tray: AtomicBool,
+    /// Start into the tray instead of onto the screen, when the OS was the one
+    /// doing the starting. Only honoured for a login launch - opening the app
+    /// yourself always shows the window, since otherwise the click would look
+    /// like nothing happened.
+    pub start_minimized: AtomicBool,
 }
 
 impl Default for AppSettingsState {
     fn default() -> Self {
-        Self { close_to_tray: AtomicBool::new(true) }
+        Self { close_to_tray: AtomicBool::new(true), start_minimized: AtomicBool::new(false) }
     }
 }
 
@@ -27,6 +33,8 @@ impl Default for AppSettingsState {
 struct SettingsFile {
     #[serde(default = "default_true")]
     close_to_tray: bool,
+    #[serde(default)]
+    start_minimized: bool,
 }
 
 fn default_true() -> bool {
@@ -35,7 +43,7 @@ fn default_true() -> bool {
 
 impl Default for SettingsFile {
     fn default() -> Self {
-        Self { close_to_tray: true }
+        Self { close_to_tray: true, start_minimized: false }
     }
 }
 
@@ -58,7 +66,10 @@ pub fn load(app: &AppHandle) -> AppSettingsState {
         .and_then(|raw| serde_json::from_str::<SettingsFile>(&raw).ok())
         .unwrap_or_default();
 
-    AppSettingsState { close_to_tray: AtomicBool::new(file.close_to_tray) }
+    AppSettingsState {
+        close_to_tray: AtomicBool::new(file.close_to_tray),
+        start_minimized: AtomicBool::new(file.start_minimized),
+    }
 }
 
 #[tauri::command]
@@ -73,9 +84,32 @@ pub fn set_close_to_tray(
     value: bool,
 ) -> Result<(), String> {
     state.close_to_tray.store(value, Ordering::Relaxed);
+    save(&app, &state)
+}
 
-    let path = settings_path(&app)?;
-    let contents = serde_json::to_string_pretty(&SettingsFile { close_to_tray: value })
-        .map_err(|e| e.to_string())?;
+#[tauri::command]
+pub fn get_start_minimized(state: tauri::State<AppSettingsState>) -> bool {
+    state.start_minimized.load(Ordering::Relaxed)
+}
+
+#[tauri::command]
+pub fn set_start_minimized(
+    app: AppHandle,
+    state: tauri::State<AppSettingsState>,
+    value: bool,
+) -> Result<(), String> {
+    state.start_minimized.store(value, Ordering::Relaxed);
+    save(&app, &state)
+}
+
+/// Write the whole file out. Both preferences go every time, so setting one
+/// cannot quietly drop the other back to its default.
+fn save(app: &AppHandle, state: &AppSettingsState) -> Result<(), String> {
+    let path = settings_path(app)?;
+    let contents = serde_json::to_string_pretty(&SettingsFile {
+        close_to_tray: state.close_to_tray.load(Ordering::Relaxed),
+        start_minimized: state.start_minimized.load(Ordering::Relaxed),
+    })
+    .map_err(|e| e.to_string())?;
     fs::write(path, contents).map_err(|e| e.to_string())
 }

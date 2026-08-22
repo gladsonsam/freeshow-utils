@@ -8,6 +8,7 @@
     loadAppSettings,
     setCloseToTray,
     setLaunchOnStartup,
+    setStartMinimized,
   } from "$lib/core/appSettings";
 
   let { open = false, onClose }: { open?: boolean; onClose?: () => void } = $props();
@@ -25,6 +26,16 @@
     <span>Launch FreeShow Utils when I log in</span>
   </label>
 
+  <label class="checkbox indented">
+    <input
+      type="checkbox"
+      checked={$appSettings.startMinimized}
+      disabled={!$appSettings.launchOnStartup}
+      onchange={(event) => setStartMinimized(event.currentTarget.checked)}
+    />
+    <span>Start minimised to the tray at login, without opening the window</span>
+  </label>
+
   <label class="checkbox">
     <input
       type="checkbox"
@@ -35,7 +46,8 @@
   </label>
 
   <p class="hint">
-    Any stage output windows keep running either way — closing this window never takes them down.
+    Starting minimised applies to the login launch only — opening the app yourself always shows
+    the window. Any stage output windows keep running either way — closing this window never takes them down.
     Turn off "close to tray" and this window's close button quits the app for real, which also
     closes every stage output. To reopen the window while it's in the tray, use the tray icon;
     it also has a Quit item that stops everything.
@@ -57,6 +69,10 @@
     gap: var(--space-2);
     font-size: 0.85rem;
     color: var(--text-dim);
+  }
+
+  .checkbox.indented {
+    margin-left: var(--space-5);
   }
 
   .checkbox input {

@@ -22,7 +22,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::oneshot;
+use tokio::sync::{oneshot, Mutex as AsyncMutex};
 
 /// Refuse a request whose headers run past this. Nothing legitimate here sends
 /// more than a couple of hundred bytes, so anything larger is a mistake or a
@@ -42,19 +42,32 @@ struct ActionEvent {
     body: Option<String>,
 }
 
+/// A server that is currently up, and the two halves of taking it back down.
+struct Running {
+    /// what it is listening on, so a redundant start can be told apart from a move
+    port: u16,
+    /// tells the accept loop to break
+    shutdown: oneshot::Sender<()>,
+    /// resolves once that loop has broken *and let go of the listener*
+    finished: oneshot::Receiver<()>,
+}
+
 pub struct ControlState {
     /// The JSON the frontend last published, served at `/state`. Shared with
     /// every open connection, so a poll never has to wake the webview.
     published: Arc<Mutex<String>>,
-    /// Sending on this stops the running server. `None` when nothing is up.
-    shutdown: Mutex<Option<oneshot::Sender<()>>>,
+    /// The running server, if there is one. An async mutex rather than a plain
+    /// one because stopping means awaiting the old task, and it is held across
+    /// the bind so that two starts arriving at once cannot both reach for the
+    /// same port.
+    running: AsyncMutex<Option<Running>>,
 }
 
 impl Default for ControlState {
     fn default() -> Self {
         Self {
             published: Arc::new(Mutex::new("{}".to_string())),
-            shutdown: Mutex::new(None),
+            running: AsyncMutex::new(None),
         }
     }
 }
@@ -74,26 +87,40 @@ pub fn set_control_state(state: tauri::State<ControlState>, value: String) {
 ///
 /// Binding happens here, before returning, so "that port is already taken" comes
 /// back as an error the operator can see rather than disappearing into a
-/// background task. Starting while already running restarts on the new port.
+/// background task. Starting while already running on a different port moves the
+/// server to the new one; starting on the port it is already on does nothing.
 #[tauri::command]
 pub async fn start_control_server(
     app: AppHandle,
     state: tauri::State<'_, ControlState>,
     port: u16,
 ) -> Result<(), String> {
-    stop(&state);
+    let mut running = state.running.lock().await;
+
+    // Already listening on exactly this port, which is what leaving the module
+    // and coming back to it asks for. Rebinding would drop whatever Companion
+    // has open for no gain, and Windows does not hand the port straight back to
+    // the process that just released it, so the rebind would often fail.
+    if running.as_ref().is_some_and(|current| current.port == port) {
+        return Ok(());
+    }
+
+    stop_running(&mut running).await;
 
     // 0.0.0.0, not localhost: the entire point is that Companion is on another
     // machine. A listener bound to the loopback would work perfectly on the
     // developer's laptop and be unreachable in the building it is for.
-    let listener = TcpListener::bind(("0.0.0.0", port))
-        .await
-        .map_err(|error| format!("Could not listen on port {port}: {error}"))?;
+    let listener = TcpListener::bind(("0.0.0.0", port)).await.map_err(|error| {
+        format!(
+            "Could not listen on port {port}: {error}. \
+             Something else on this machine is already holding it - usually a \
+             second copy of FreeShow Utils, or FreeShow itself if the port was \
+             changed to one of the ones it uses."
+        )
+    })?;
 
-    let (sender, mut receiver) = oneshot::channel::<()>();
-    if let Ok(mut shutdown) = state.shutdown.lock() {
-        *shutdown = Some(sender);
-    }
+    let (shutdown, mut receiver) = oneshot::channel::<()>();
+    let (done, finished) = oneshot::channel::<()>();
 
     let published = Arc::clone(&state.published);
 
@@ -113,24 +140,38 @@ pub async fn start_control_server(
                 }
             }
         }
+
+        // Release the port before announcing the stop: whoever asked for it is
+        // usually about to bind the same one again.
+        drop(listener);
+        let _ = done.send(());
     });
+
+    *running = Some(Running { port, shutdown, finished });
 
     Ok(())
 }
 
 #[tauri::command]
-pub fn stop_control_server(state: tauri::State<ControlState>) {
-    stop(&state);
+pub async fn stop_control_server(state: tauri::State<'_, ControlState>) -> Result<(), String> {
+    let mut running = state.running.lock().await;
+    stop_running(&mut running).await;
+    Ok(())
 }
 
-fn stop(state: &tauri::State<ControlState>) {
-    if let Ok(mut shutdown) = state.shutdown.lock() {
-        if let Some(sender) = shutdown.take() {
-            // The receiver is gone if the task already ended, which is the state
-            // being asked for anyway.
-            let _ = sender.send(());
-        }
-    }
+/// Stop the running server and wait until it has actually let go of the port.
+///
+/// The waiting is the point. Signalling and returning was enough on Linux, where
+/// a fresh bind is allowed while the old listener is still closing, but on
+/// Windows that bind fails with "only one usage of each socket address" - the
+/// restart raced its own teardown and lost.
+async fn stop_running(running: &mut Option<Running>) {
+    let Some(current) = running.take() else { return };
+
+    // A closed channel at either step means the task has already ended, which is
+    // the state being asked for anyway.
+    let _ = current.shutdown.send(());
+    let _ = current.finished.await;
 }
 
 fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
