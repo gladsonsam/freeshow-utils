@@ -1,6 +1,6 @@
 [package]
 name = "freeshow-utils"
-version = "0.2.0"
+version = "0.2.1"
 description = "Lightweight companion utilities for FreeShow"
 authors = ["Gladson Sam"]
 license = "GPL-3.0-only"
