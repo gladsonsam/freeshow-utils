@@ -16,6 +16,7 @@ Some ship with the app:
 | --- | --- |
 | Stage Display | shipped |
 | Show Processor | shipped — runs Python scripts over pasted text; operating on shows directly is still to come |
+| Key Changer | shipped — puts the song on output into any key, from the app or a Stream Deck |
 | Show Importer | planned |
 
 But shipping with the app is meant to be an accident of timing, nothing more. **The goal is that
@@ -62,9 +63,17 @@ A module must not:
 - import from another module's folder — extract to `core/` or `ui/` instead
 - talk to FreeShow directly — go through `core/`, so every module benefits from one fix
 - require a change to the shell to work
-- **write to FreeShow.** The whole app is read-only: it subscribes to the Stage feed and issues
-  `get_*` queries. Nothing here may control or mutate a running FreeShow. This is a safety
-  property for people using it live on a Sunday morning, not a style preference.
+- **write to FreeShow outside the allowlist.** Reading is unrestricted. Writing is confined to
+  `WRITE_ACTIONS` in `src/lib/core/freeshowClient.ts` — today, the two transpose actions and
+  nothing else — and goes through `command()`, never `request()`. A module cannot widen that list;
+  only a deliberate edit to core can.
+
+  The app was fully read-only until the Key Changer, and the reasoning behind that has not
+  changed: this runs on a machine driving a live service, where a stray `next_slide` is a mistake
+  the whole congregation sees. What changed is that transposing a song is *worth* a write, and one
+  enumerated action is a very different risk from an open channel. Keep it enumerated. If you find
+  yourself adding an action so a feature can be convenient, you are spending someone's Sunday
+  morning on it.
 
 ## Contracts you must not casually break
 

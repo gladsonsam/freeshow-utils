@@ -5,9 +5,10 @@ A lightweight desktop companion for [FreeShow](https://freeshow.app).
 - **Stage Display** — live lyrics, chords and cues on a second screen, rendered by templates you
   write in plain HTML/CSS/JS. Pick a display, hit Activate.
 - **Show Processor** — reshape show text with your own Python scripts.
+- **Key Changer** — put the song on output into any key, from the app or from a Stream Deck.
 
-Read-only: it subscribes to FreeShow's output feed and never sends anything that changes a
-running service.
+Almost entirely read-only: it subscribes to FreeShow's output feed and asks it questions. The one
+thing it can change is a song's key, and only through FreeShow's own transpose actions.
 
 ## Setup
 
@@ -16,6 +17,22 @@ In FreeShow, under **Settings → Connections**, enable **Stage Output** (port `
 a pointer saying which output to mirror; your template does the rendering.
 
 Host and ports are editable from the connection indicator in the sidebar.
+
+## Driving the Key Changer from a Stream Deck
+
+Turn on the network control in the Key Changer and point a **Generic HTTP** connection in Bitfocus
+Companion at this machine. Companion can live on another box; it usually does.
+
+| | |
+| --- | --- |
+| `POST /action/key-changer/key/G` | put the current song in G — any key name works, `F#`, `Bb`, `Am` |
+| `POST /action/key-changer/up` / `/down` | one semitone |
+| `POST /action/key-changer/reset` | back to the key the song started in |
+| `GET /state/key-changer` | `currentKey`, `showName` and friends, for a button that lights up |
+
+For the highlight: poll `/state/key-changer` into a Companion variable and add a feedback comparing
+it to each button's own key. The port listens on the whole network and has no password, the same as
+FreeShow's own — keep it off the open internet.
 
 ## Writing a template
 
