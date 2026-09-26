@@ -10,10 +10,16 @@
     setLaunchOnStartup,
     setStartMinimized,
   } from "$lib/core/appSettings";
+  import { aiSettings, listStructuredModels } from "$lib/core/openrouter";
 
   let { open = false, onClose }: { open?: boolean; onClose?: () => void } = $props();
 
-  onMount(loadAppSettings);
+  let models = $state<string[]>([]);
+
+  onMount(() => {
+    void loadAppSettings();
+    void listStructuredModels().then((ids) => (models = ids));
+  });
 </script>
 
 <Modal {open} {onClose} title="App settings" width="460px">
@@ -53,6 +59,43 @@
     it also has a Quit item that stops everything.
   </p>
 
+  <h3 class="section">AI</h3>
+
+  <label class="field">
+    <span>OpenRouter API key</span>
+    <input
+      type="password"
+      autocomplete="off"
+      spellcheck="false"
+      placeholder="sk-or-…"
+      value={$aiSettings.apiKey}
+      onchange={(event) =>
+        aiSettings.update((s) => ({ ...s, apiKey: event.currentTarget.value.trim() }))}
+    />
+  </label>
+
+  <label class="field">
+    <span>Model</span>
+    <input
+      list="ai-models"
+      spellcheck="false"
+      value={$aiSettings.model}
+      onchange={(event) =>
+        aiSettings.update((s) => ({ ...s, model: event.currentTarget.value.trim() }))}
+    />
+    <datalist id="ai-models">
+      {#each models as model (model)}
+        <option value={model}></option>
+      {/each}
+    </datalist>
+  </label>
+
+  <p class="hint">
+    Used by modules that hand text to a language model, such as the Show Rewriter. The key stays
+    on this machine and is only sent to OpenRouter. The model list shows only models that can
+    return structured output.
+  </p>
+
   {#if $appSettingsError}
     <div class="error-box">{$appSettingsError}</div>
   {/if}
@@ -78,6 +121,20 @@
   .checkbox input {
     width: auto;
     accent-color: var(--secondary);
+  }
+
+  .section {
+    margin: var(--space-2) 0 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    font-size: 0.85rem;
+    color: var(--text-dim);
   }
 
   .hint {

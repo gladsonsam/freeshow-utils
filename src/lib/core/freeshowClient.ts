@@ -27,10 +27,20 @@ type Pending = { resolve: (data: any) => void; settled: boolean };
  * by any module, however it was asked for - including over the control surface,
  * where the caller is a Stream Deck somewhere on the network.
  *
+ * `set_plain_text` replaces a show's text wholesale. It is the same path
+ * FreeShow's own transpose runs through (read the plain text, change it, write
+ * it back). Modules should send it through `writeShowText` in `showText.ts`,
+ * which refuses text whose slide structure no longer matches the show's and
+ * reads the result back, rather than calling `command` with it directly.
+ *
  * Adding to this list is a deliberate act. Think about what it means for someone
  * mid-service before you do.
  */
-export const WRITE_ACTIONS = new Set(["transpose_show_up", "transpose_show_down"]);
+export const WRITE_ACTIONS = new Set([
+  "transpose_show_up",
+  "transpose_show_down",
+  "set_plain_text",
+]);
 
 /**
  * Owns both connections to FreeShow:

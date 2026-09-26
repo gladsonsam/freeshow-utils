@@ -6,9 +6,13 @@ A lightweight desktop companion for [FreeShow](https://freeshow.app).
   write in plain HTML/CSS/JS. Pick a display, hit Activate.
 - **Show Processor** — reshape show text with your own Python scripts.
 - **Key Changer** — put the song on output into any key, from the app or from a Stream Deck.
+- **Show Rewriter** — hand a show's words to an AI model (through OpenRouter) with an instruction,
+  such as "add an English translation under each line", review it slide by slide, write it back.
 
-Almost entirely read-only: it subscribes to FreeShow's output feed and asks it questions. The one
-thing it can change is a song's key, and only through FreeShow's own transpose actions.
+Almost entirely read-only: it subscribes to FreeShow's output feed and asks it questions. It
+changes shows in two ways only: a song's key, through FreeShow's own transpose actions, and a
+show's text, through FreeShow's plain-text editor action, after you have reviewed the change and
+only if the show's slides still line up.
 
 ## Setup
 

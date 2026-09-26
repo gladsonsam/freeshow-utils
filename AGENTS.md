@@ -17,6 +17,7 @@ Some ship with the app:
 | Stage Display | shipped |
 | Show Processor | shipped — runs Python scripts over pasted text; operating on shows directly is still to come |
 | Key Changer | shipped — puts the song on output into any key, from the app or a Stream Deck |
+| Show Rewriter | shipped — hands a show's words to an AI model with an instruction, writes the reviewed result back |
 | Show Importer | planned |
 
 But shipping with the app is meant to be an accident of timing, nothing more. **The goal is that
@@ -56,6 +57,13 @@ A module can rely on:
 - `src/lib/core/` — the shared FreeShow connection and a clean, resolved data model. One
   connection per window, opened by the app shell, read by any module.
 - `src/lib/ui/` — themed primitives, so a third-party module looks native for free.
+- `core/showText.ts` — a show's words in FreeShow's plain-text format, and a structure-checked,
+  read-back-verified way to write them.
+- `core/openrouter.ts` — schema-constrained model calls through the operator's OpenRouter key
+  (set in App settings).
+- An optional `activate()` in its registry entry, which the shell runs once at launch, tray
+  launch included. Anything that must work while the module isn't on screen (following output,
+  answering a Stream Deck) goes there; the component is only mounted while its tab is open.
 - Its own folder, its own routes-free component, its own state.
 
 A module must not:
@@ -65,7 +73,8 @@ A module must not:
 - require a change to the shell to work
 - **write to FreeShow outside the allowlist.** Reading is unrestricted. Writing is confined to
   `WRITE_ACTIONS` in `src/lib/core/freeshowClient.ts` — today, the two transpose actions and
-  nothing else — and goes through `command()`, never `request()`. A module cannot widen that list;
+  `set_plain_text` — and goes through `command()`, never `request()`. `set_plain_text` goes
+  through `writeShowText()`, not `command()` directly. A module cannot widen that list;
   only a deliberate edit to core can.
 
   The app was fully read-only until the Key Changer, and the reasoning behind that has not

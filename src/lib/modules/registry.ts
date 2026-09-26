@@ -3,6 +3,7 @@ import StageDisplay from "./stage-display/StageDisplay.svelte";
 import ShowProcessor from "./show-processor/ShowProcessor.svelte";
 import KeyChanger from "./key-changer/KeyChanger.svelte";
 import { activate as activateKeyChanger } from "./key-changer/service";
+import ShowRewriter from "./show-rewriter/ShowRewriter.svelte";
 
 export type AppModule = {
   id: string;
@@ -53,6 +54,13 @@ export const appModules: AppModule[] = [
     description: "Put the song on output into any key, from here or from a Stream Deck.",
     component: KeyChanger,
     activate: activateKeyChanger,
+  },
+  {
+    id: "show-rewriter",
+    name: "Show Rewriter",
+    icon: "✍️",
+    description: "Hand a show's words to an AI model with an instruction, review it, write it back.",
+    component: ShowRewriter,
   },
 ];
 
