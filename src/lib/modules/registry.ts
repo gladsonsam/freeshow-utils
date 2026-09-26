@@ -2,6 +2,7 @@ import type { Component } from "svelte";
 import StageDisplay from "./stage-display/StageDisplay.svelte";
 import ShowProcessor from "./show-processor/ShowProcessor.svelte";
 import KeyChanger from "./key-changer/KeyChanger.svelte";
+import { activate as activateKeyChanger } from "./key-changer/service";
 
 export type AppModule = {
   id: string;
@@ -9,6 +10,15 @@ export type AppModule = {
   icon: string;
   description: string;
   component: Component<any>;
+  /**
+   * Background work that must not wait for the module to be opened - following
+   * output, answering a Stream Deck. The shell calls it once when the main
+   * window starts, tray launch included, and it keeps running whichever module
+   * is on screen. Returns its teardown. The component should only be a view
+   * onto whatever state this maintains, since it is mounted and unmounted as the
+   * operator moves between modules.
+   */
+  activate?: () => (() => void) | void;
 };
 
 /**
@@ -42,8 +52,17 @@ export const appModules: AppModule[] = [
     icon: "🎹",
     description: "Put the song on output into any key, from here or from a Stream Deck.",
     component: KeyChanger,
+    activate: activateKeyChanger,
   },
 ];
+
+/** start every module's background work; returns one teardown for all of it */
+export function activateModules(): () => void {
+  const teardowns = appModules.map((module) => module.activate?.());
+  return () => {
+    for (const teardown of teardowns) teardown?.();
+  };
+}
 
 export function findModule(id: string): AppModule {
   return appModules.find((module) => module.id === id) ?? appModules[0];

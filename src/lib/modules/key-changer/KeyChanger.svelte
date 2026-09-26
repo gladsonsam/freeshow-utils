@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import Button from "$lib/ui/Button.svelte";
   import Icon from "$lib/ui/Icon.svelte";
   import IconButton from "$lib/ui/IconButton.svelte";
@@ -8,7 +7,6 @@
     allKeys,
     keyName,
     parseChord,
-    pitchClass,
     semitoneDelta,
     showChords,
     transposeChord,
@@ -16,22 +14,17 @@
   import {
     controlServer,
     controlSettings,
-    publishControlState,
-    registerControlModule,
     startControlServer,
     stopControlServer,
   } from "$lib/core/controlSurface";
   import { connectionStatus } from "$lib/core/freeshowClient";
   import {
-    followOutput,
     keyChangerState,
     refresh,
     resetToOriginal,
     transposeBy,
     transposeTo,
   } from "./keyState";
-
-  const MODULE_ID = "key-changer";
 
   /** how many distinct chords to show in the before/after preview */
   const PREVIEW_CHORDS = 6;
@@ -93,69 +86,6 @@
     const steps = stepsTo(pitch);
     return steps === 0 ? "" : steps > 0 ? `+${steps}` : `${steps}`;
   }
-
-  // ── Remote control ──────────────────────────────────────────────────────────
-
-  /**
-   * Turn a key named in a URL into a pitch class.
-   *
-   * Accepts whatever a Companion button is likely to have been labelled with -
-   * "G", "g", "Gm", "F#", "Gb", "Ab" - because the person building that page is
-   * doing it once, by hand, months before it matters, and having it silently do
-   * nothing is a bad way to find out you typed the wrong thing.
-   */
-  function pitchFromName(name: string): number | null {
-    const parsed = parseChord(decodeURIComponent(name));
-    return parsed ? pitchClass(parsed.root) : null;
-  }
-
-  async function handleControl(action: { path: string[] }) {
-    const [verb, argument] = action.path;
-
-    if (verb === "up") return transposeBy(1);
-    if (verb === "down") return transposeBy(-1);
-    if (verb === "reset") return resetToOriginal();
-    if (verb === "refresh") return refresh();
-
-    if (verb === "key" && argument) {
-      const pitch = pitchFromName(argument);
-      if (pitch !== null) await transposeTo(pitch);
-    }
-  }
-
-  onMount(() => {
-    const unfollow = followOutput();
-    const unregister = registerControlModule(MODULE_ID, handleControl);
-    if ($controlSettings.enabled) void startControlServer($controlSettings.port);
-
-    return () => {
-      unfollow();
-      unregister();
-    };
-  });
-
-  /**
-   * Keep the published state in step with what the screen shows.
-   *
-   * This is what makes a Stream Deck button light up on the right key: Companion
-   * polls it into a variable and a feedback compares that to the button's own
-   * key. It has to be pushed on every change, including the ones that came from
-   * the Stream Deck itself.
-   */
-  $effect(() => {
-    publishControlState(MODULE_ID, {
-      showName: target?.showName ?? "",
-      showId: target?.showId ?? "",
-      currentKey: currentKey?.label ?? "",
-      currentPitch: currentKey?.pitch ?? -1,
-      originalKey: originalLabel,
-      minor,
-      confident: currentKey?.confident ?? false,
-      source: currentKey?.source ?? "",
-      busy: $keyChangerState.busy,
-      connected,
-    });
-  });
 
   async function toggleServer(enabled: boolean) {
     controlSettings.update((settings) => ({ ...settings, enabled }));

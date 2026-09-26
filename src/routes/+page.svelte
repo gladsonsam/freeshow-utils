@@ -1,6 +1,7 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { freeshowClient } from "$lib/core/freeshowClient";
-  import { appModules, findModule } from "$lib/modules/registry";
+  import { activateModules, appModules, findModule } from "$lib/modules/registry";
   import AppSettingsModal from "$lib/shell/AppSettingsModal.svelte";
   import ConnectionSettingsModal from "$lib/shell/ConnectionSettingsModal.svelte";
   import ConnectionIndicator from "$lib/ui/ConnectionIndicator.svelte";
@@ -15,6 +16,11 @@
   let appSettingsOpen = $state(false);
 
   let active = $derived(findModule(activeId));
+
+  // Here rather than in the layout, which output windows share: background work
+  // belongs to the main window alone, and runs from launch - hidden in the tray
+  // or not - instead of from the first time a module's tab is opened.
+  onMount(() => activateModules());
 </script>
 
 <div class="app">

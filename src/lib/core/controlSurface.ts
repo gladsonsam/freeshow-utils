@@ -24,7 +24,7 @@
  * the problem to Companion's config. Do not expose the port to the internet.
  */
 
-import { writable, type Readable } from "svelte/store";
+import { get, writable, type Readable } from "svelte/store";
 
 export type ControlAction = {
   /** the path after `/action/<module>/`, already split, e.g. ["key", "G"] */
@@ -91,10 +91,11 @@ const published = new Map<string, Record<string, unknown>>();
 let listening = false;
 
 /**
- * Start relaying actions from the Rust listener.
+ * Start relaying actions from the Rust listener, and bring the server back up
+ * if the operator left it on.
  *
- * Done lazily on first registration rather than at app start, so a build of the
- * app with no module using the control surface never sets any of this up. The
+ * Done lazily on first registration rather than unconditionally, so a build of
+ * the app with no module using the control surface never sets any of this up. The
  * import is dynamic because this module is also pulled in during the static
  * build, where `@tauri-apps/api` has no host to talk to.
  */
@@ -107,6 +108,11 @@ async function ensureListening() {
     await listen<{ path: string; body: string | null }>("control-action", (event) => {
       dispatch(event.payload.path, event.payload.body);
     });
+
+    // The operator turned the server on once; it should come back with the app,
+    // not wait for them to find the setting again.
+    const settings = get(controlSettings);
+    if (settings.enabled) await startControlServer(settings.port);
   } catch (error) {
     listening = false;
     serverState.update((state) => ({ ...state, error: String(error) }));
