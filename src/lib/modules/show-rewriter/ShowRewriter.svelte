@@ -19,6 +19,9 @@
     rewriterState,
     undo,
     updateInstruction,
+    DEFAULT_SYSTEM_PROMPT,
+    resetSystemPrompt,
+    systemPrompt,
   } from "./rewriter";
 
   /** how many search matches to list - past this, typing more is quicker than scrolling */
@@ -224,6 +227,34 @@
       {:else}
         <p class="hint">Using {$aiSettings.model}. Change it in App settings.</p>
       {/if}
+
+      <details class="reply-rules">
+        <summary>
+          How the model should reply
+          {#if $systemPrompt !== DEFAULT_SYSTEM_PROMPT}<span class="faint">· edited</span>{/if}
+        </summary>
+        <textarea
+          class="instruction rules"
+          spellcheck="false"
+          value={$systemPrompt}
+          oninput={(event) => systemPrompt.set(event.currentTarget.value)}
+        ></textarea>
+        <div class="rules-foot">
+          <p class="hint">
+            Sent with every instruction. <code>{"{count}"}</code> becomes the number of slides. The
+            reply is always one text per slide and is checked against the show before anything is
+            written, so this shapes the words, not the show's structure.
+          </p>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={$systemPrompt === DEFAULT_SYSTEM_PROMPT}
+            onclick={resetSystemPrompt}
+          >
+            Reset to default
+          </Button>
+        </div>
+      </details>
     </Panel>
 
     {#if session.error}
@@ -318,6 +349,10 @@
   }
 
   /* the review is the part that needs the room; the rest sizes to its content */
+  .work-column > :global(.panel:not(:last-child)) {
+    flex-shrink: 0;
+  }
+
   .work-column > :global(.panel:last-child) {
     flex: 1 1 0;
     min-height: 240px;
@@ -380,6 +415,36 @@
     resize: vertical;
     font-size: 0.9rem;
     line-height: 1.5;
+  }
+
+  .reply-rules {
+    margin-top: var(--space-3);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--line);
+  }
+
+  .reply-rules summary {
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+  }
+
+  .rules {
+    margin-top: var(--space-2);
+    min-height: 200px;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+  }
+
+  .rules-foot {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+
+  .rules-foot code {
+    font-family: var(--font-mono);
   }
 
   .loaded {

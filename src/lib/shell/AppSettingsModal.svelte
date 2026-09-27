@@ -10,7 +10,7 @@
     setLaunchOnStartup,
     setStartMinimized,
   } from "$lib/core/appSettings";
-  import { aiSettings, listStructuredModels } from "$lib/core/openrouter";
+  import { aiSettings, DEFAULT_MODEL, listStructuredModels } from "$lib/core/openrouter";
 
   let { open = false, onClose }: { open?: boolean; onClose?: () => void } = $props();
 
@@ -79,9 +79,13 @@
     <input
       list="ai-models"
       spellcheck="false"
+      placeholder={DEFAULT_MODEL}
       value={$aiSettings.model}
       onchange={(event) =>
-        aiSettings.update((s) => ({ ...s, model: event.currentTarget.value.trim() }))}
+        aiSettings.update((s) => ({
+          ...s,
+          model: event.currentTarget.value.trim() || DEFAULT_MODEL,
+        }))}
     />
     <datalist id="ai-models">
       {#each models as model (model)}
@@ -92,8 +96,9 @@
 
   <p class="hint">
     Used by modules that hand text to a language model, such as the Show Rewriter. The key stays
-    on this machine and is only sent to OpenRouter. The model list shows only models that can
-    return structured output.
+    on this machine and is only sent to OpenRouter. The default, openrouter/free, picks one of
+    OpenRouter's free models for each request; choose a paid model for more reliable results. The
+    list shows only models that can return structured output.
   </p>
 
   {#if $appSettingsError}

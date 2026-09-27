@@ -159,19 +159,53 @@ const SCHEMA = {
   additionalProperties: false,
 };
 
-function systemPrompt(count: number): string {
-  return [
-    "You edit the words of songs for FreeShow, the presentation software a church uses to put lyrics on screen.",
-    "You are given a song as a numbered list of slides, and an instruction. Return every slide's text, changed only as the instruction asks.",
-    "",
-    "Rules:",
-    `- Return exactly ${count} slides, in the same order: one for each slide you were given. Never merge, split, reorder, add or drop slides.`,
-    "- Return only the slide's text. Do not include the group name or slide number.",
-    "- Chords are written inline in square brackets, like [G] or [F#m7]. Keep them exactly where they are on the lines you keep. Do not add chords to lines you add.",
-    "- Lines like [#1] or [#2:en] mark separate text boxes. Keep them exactly as they are, on their own line.",
-    "- Separate lines with a single newline. Never leave a blank line inside a slide.",
-    "- Do not add commentary, headings or notes.",
-  ].join("\n");
+// ── Reply rules ───────────────────────────────────────────────────────────────
+
+/**
+ * The system prompt: how the model should treat the song and shape its reply.
+ *
+ * Editable, because what a good reply looks like depends on the church - how
+ * translations are phrased, which script transliteration uses, whether to keep
+ * punctuation. `{count}` is replaced with the number of slides. Whatever it
+ * says, the reply is still forced into one text per slide and checked against
+ * the show before anything is written, so a prompt edit can make the words
+ * worse but cannot re-flow a show.
+ */
+export const DEFAULT_SYSTEM_PROMPT = [
+  "You edit the words of songs for FreeShow, the presentation software a church uses to put lyrics on screen.",
+  "You are given a song as a numbered list of slides, and an instruction. Return every slide's text, changed only as the instruction asks.",
+  "",
+  "Rules:",
+  "- Return exactly {count} slides, in the same order: one for each slide you were given. Never merge, split, reorder, add or drop slides.",
+  "- Return only the slide's text. Do not include the group name or slide number.",
+  "- Chords are written inline in square brackets, like [G] or [F#m7]. Keep them exactly where they are on the lines you keep. Do not add chords to lines you add.",
+  "- Lines like [#1] or [#2:en] mark separate text boxes. Keep them exactly as they are, on their own line.",
+  "- Separate lines with a single newline. Never leave a blank line inside a slide.",
+  "- Do not add commentary, headings or notes.",
+].join("\n");
+
+const SYSTEM_PROMPT_KEY = "freeshow-utils.show-rewriter.system-prompt";
+
+function loadSystemPrompt(): string {
+  if (typeof localStorage === "undefined") return DEFAULT_SYSTEM_PROMPT;
+  return localStorage.getItem(SYSTEM_PROMPT_KEY) || DEFAULT_SYSTEM_PROMPT;
+}
+
+export const systemPrompt = writable<string>(loadSystemPrompt());
+
+systemPrompt.subscribe((value) => {
+  if (typeof localStorage === "undefined") return;
+  try {
+    // the default is not stored, so an improved default reaches everyone who never changed it
+    if (value === DEFAULT_SYSTEM_PROMPT) localStorage.removeItem(SYSTEM_PROMPT_KEY);
+    else localStorage.setItem(SYSTEM_PROMPT_KEY, value);
+  } catch {
+    // storage unavailable - edits just won't survive a restart
+  }
+});
+
+export function resetSystemPrompt() {
+  systemPrompt.set(DEFAULT_SYSTEM_PROMPT);
 }
 
 function userPrompt(instruction: string, showName: string, slides: TextSlide[]): string {
@@ -197,7 +231,10 @@ export async function rewrite(instruction: string) {
   const result = await completeStructured<{ slides: { text: string }[] }>({
     name: "rewritten_show",
     schema: SCHEMA,
-    system: systemPrompt(current.slides.length),
+    system: (get(systemPrompt).trim() || DEFAULT_SYSTEM_PROMPT).replaceAll(
+      "{count}",
+      String(current.slides.length),
+    ),
     user: userPrompt(instruction, current.showName, current.slides),
     signal: controller.signal,
   });

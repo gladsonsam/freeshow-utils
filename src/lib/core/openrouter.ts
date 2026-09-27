@@ -26,12 +26,26 @@ export type AiSettings = {
 const SETTINGS_KEY = "freeshow-utils.ai";
 const ENDPOINT = "https://openrouter.ai/api/v1";
 
-const DEFAULTS: AiSettings = { apiKey: "", model: "anthropic/claude-sonnet-5" };
+/**
+ * `openrouter/free` routes each request to one of OpenRouter's free models, so
+ * the feature works on a new key with no credit on it. Anyone who wants better
+ * translations can pick a paid model in App settings.
+ */
+export const DEFAULT_MODEL = "openrouter/free";
+
+/** the default before free routing - a copy still holding it is moved on */
+const PREVIOUS_DEFAULT_MODEL = "anthropic/claude-sonnet-5";
+
+const DEFAULTS: AiSettings = { apiKey: "", model: DEFAULT_MODEL };
 
 function loadSettings(): AiSettings {
   if (typeof localStorage === "undefined") return { ...DEFAULTS };
   try {
-    return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") };
+    const saved = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") };
+    // Settings are saved as soon as they load, so an old default is
+    // indistinguishable from a choice - but it only shipped for a day.
+    if (saved.model === PREVIOUS_DEFAULT_MODEL) saved.model = DEFAULT_MODEL;
+    return saved;
   } catch {
     return { ...DEFAULTS };
   }
